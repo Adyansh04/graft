@@ -12,21 +12,30 @@ label file per captured frame.
 import json
 from pathlib import Path
 
+import omni.replicator.core as rep
+
 from graft.sim.labels import box_records, normalise_id_labels, single_render_product
 
 
-class GraftLabelWriter:
+class GraftLabelWriter(rep.Writer):
     """Per frame: `bboxes_NNNNNN.json` plus `instance_NNNNNN.png`.
 
     `id_map.json` records the annotator's id-to-class mapping once per clip.
+
+    Subclasses Replicator's `Writer`: the registry rejects anything else, and
+    the base supplies `attach`/`detach`/`initialize`.
     """
 
-    def __init__(self, output_dir: str, class_names: list[str]):
-        import omni.replicator.core as rep
+    version = "1.0.0"
+    data_structure = "renderProduct"
 
-        self._out = Path(output_dir)
-        self._out.mkdir(parents=True, exist_ok=True)
-        self._class_names = list(class_names)
+    def __init__(self, output_dir: str | None = None, class_names: list[str] | None = None):
+        # The registry constructs with no arguments and the real values
+        # arrive via initialize(), which calls __init__ again.
+        self._out = Path(output_dir) if output_dir else None
+        if self._out:
+            self._out.mkdir(parents=True, exist_ok=True)
+        self._class_names = list(class_names or [])
         self._frame = 0
         self._id_map_written = False
 
@@ -38,13 +47,17 @@ class GraftLabelWriter:
                 "instance_segmentation", init_params={"semanticTypes": ["class"]}
             ),
         ]
-        self.data_structure = "renderProduct"
 
     @property
     def frames_written(self) -> int:
         return self._frame
 
     def write(self, data: dict) -> None:
+        if self._out is None:
+            raise RuntimeError(
+                "GraftLabelWriter has no output_dir — call initialize(output_dir=..., "
+                "class_names=...) before attaching it"
+            )
         payload = single_render_product(data)
         boxes = payload.get("bounding_box_2d_tight") or {}
         instances = payload.get("instance_segmentation") or {}
@@ -94,6 +107,4 @@ class GraftLabelWriter:
 
 
 def register() -> None:
-    import omni.replicator.core as rep
-
     rep.writers.register_writer(GraftLabelWriter)

@@ -13,6 +13,7 @@ Runs in the Isaac Sim venv, launched by `graft capture` via a subprocess.
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -25,6 +26,10 @@ from graft.sim.randomize import SceneParams, clip_seeds, sample_scene
 
 TARGET_PRIM = "/World/Target"
 COSMOS_MODALITIES = ("rgb", "depth", "segmentation", "shaded_seg", "edges")
+
+# Which frame of the first clip to check for labels. Late enough that the
+# writer has flushed, early enough to fail before a whole clip is rendered.
+LABEL_CHECK_FRAME = 4
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -50,12 +55,24 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{n_clips - len(pending)}/{n_clips} clips complete; rendering {pending}")
 
     app = bootstrap.launch(headless=not args.gui)
+    failed = False
     try:
         _prepare_stage(app, config)
         for index in pending:
             _render_clip(app, config, paths, index, seeds[index], frames)
-    finally:
-        app.close()
+    except Exception:  # noqa: BLE001 - close() would otherwise hide this
+        import traceback
+
+        traceback.print_exc()
+        failed = True
+
+    # SimulationApp.close() does not return and exits 0, so a failure has to
+    # be reported before it and the process ended directly.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    if failed:
+        os._exit(1)
+    app.close()
     return 0
 
 
@@ -141,7 +158,10 @@ def _render_clip(app, config, paths: RunPaths, index: int, seed: int, frames: in
         rep.orchestrator.step(
             rt_subframes=config.sim.rt_subframes, delta_time=0.0, pause_timeline=False
         )
-        if index == 0 and frame_index == 0:
+        # Writer output is queued, so give it a few frames and a flush before
+        # judging whether the label reached the annotator.
+        if index == 0 and frame_index == LABEL_CHECK_FRAME:
+            rep.orchestrator.wait_until_complete()
             _assert_labels_took(clip_dir, config.classes[0].name)
 
     rep.orchestrator.wait_until_complete()

@@ -11,6 +11,9 @@ producing an annotation.
 
 TAXONOMY = "class"
 
+# Instances can nest; this bounds the re-walk rather than looping forever.
+MAX_INSTANCE_DEPTH = 8
+
 
 def make_editable(prim_path: str) -> list[str]:
     """Clear the instanceable flag on a subtree.
@@ -32,18 +35,23 @@ def make_editable(prim_path: str) -> list[str]:
     if not root or not root.IsValid():
         raise RuntimeError(f"cannot edit missing prim {prim_path}")
 
-    cleared = []
-    # Re-walk after each change: clearing one flag can expose nested
-    # instances that were invisible while the outer one was instanced.
-    while True:
-        found = [
-            p for p in Usd.PrimRange(root, Usd.TraverseInstanceProxies()) if p.IsInstance()
+    cleared: list[str] = []
+    # Clearing an outer flag expires the prim handles beneath it and can
+    # expose nested instances, so re-walk and re-fetch by path each pass.
+    for _ in range(MAX_INSTANCE_DEPTH):
+        root = stage.GetPrimAtPath(prim_path)
+        paths = [
+            str(p.GetPath())
+            for p in Usd.PrimRange(root, Usd.TraverseInstanceProxies())
+            if p.IsInstance()
         ]
-        if not found:
+        if not paths:
             break
-        for prim in found:
-            prim.SetInstanceable(False)
-            cleared.append(str(prim.GetPath()))
+        for path in paths:
+            prim = stage.GetPrimAtPath(path)
+            if prim and prim.IsValid() and prim.IsInstance():
+                prim.SetInstanceable(False)
+                cleared.append(path)
     return cleared
 
 

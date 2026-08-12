@@ -251,6 +251,7 @@ def write_clip_done(
     outputs: dict[str, list[str]],
     negative: bool = False,
     controls_pruned: bool = False,
+    label_offset: int = 0,
 ) -> None:
     """Record a verified clip.
 
@@ -267,6 +268,7 @@ def write_clip_done(
                 "verified": True,
                 "negative": negative,
                 "controls_pruned": controls_pruned,
+                "label_offset": label_offset,
                 "modality_counts": modality_counts,
                 "label_count": label_count,
                 "outputs": outputs,

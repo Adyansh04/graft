@@ -29,7 +29,12 @@ COSMOS_MODALITIES = ("rgb", "depth", "segmentation", "shaded_seg", "edges")
 
 # Which frame of the first clip to check for labels. Late enough that the
 # writer has flushed, early enough to fail before a whole clip is rendered.
-LABEL_CHECK_FRAME = 4
+LABEL_CHECK_FRAME = 8
+
+# CosmosWriter drops its opening steps (measured: 5) and numbers its output
+# from zero regardless, so its frame i is our step i+offset. Capture spare
+# steps and realign afterwards rather than trusting the counts to match.
+CAPTURE_MARGIN_FRAMES = 15
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -152,7 +157,9 @@ def _render_clip(app, config, paths: RunPaths, index: int, seed: int, frames: in
     cosmos_writer.attach(render_product)
 
     target_prim = _prim(TARGET_PRIM)
-    poses = orbit_trajectory(params.orbit, frames)
+    # CosmosWriter discards its first few steps and renumbers from zero, so
+    # extra steps are captured and the surplus trimmed after alignment.
+    poses = orbit_trajectory(params.orbit, frames + CAPTURE_MARGIN_FRAMES)
     for frame_index, pose in enumerate(poses):
         rep.functional.modify.pose(
             camera,
@@ -288,6 +295,9 @@ def _finalise_clip(paths: RunPaths, index: int, seed: int, frames: int, params: 
     clip_dir = paths.clip(index)
     cosmos_dir = clip_dir / "cosmos"
 
+    offset = _realign_labels(clip_dir, cosmos_dir, frames)
+    _trim_modalities(cosmos_dir, frames)
+
     counts = {
         modality: len(list(cosmos_dir.rglob(f"{modality}/*.png")))
         for modality in COSMOS_MODALITIES
@@ -314,9 +324,62 @@ def _finalise_clip(paths: RunPaths, index: int, seed: int, frames: int, params: 
         modality_counts=counts,
         label_count=label_count,
         outputs=outputs,
+        label_offset=offset,
         negative=params.negative,
     )
     print(f"clip {index}: {frames} frames x {len(counts)} modalities, {len(outputs['mp4'])} mp4(s)")
+
+
+def _realign_labels(clip_dir: Path, cosmos_dir: Path, frames: int) -> int:
+    """Drop the leading labels CosmosWriter never recorded, then renumber.
+
+    CosmosWriter skips its opening steps and numbers from zero, so its frame
+    i is our step i + (labels - cosmos). Shifting the labels down makes index
+    i mean the same moment in every modality, which is what everything
+    downstream assumes.
+    """
+    labels_dir = clip_dir / "labels"
+    labels = sorted(labels_dir.glob("bboxes_*.json"))
+    cosmos = sorted(cosmos_dir.rglob("rgb/*.png"))
+    offset = len(labels) - len(cosmos)
+    if offset < 0:
+        raise RuntimeError(
+            f"{clip_dir.name}: {len(cosmos)} rendered frames but only {len(labels)} "
+            "labels — cannot align"
+        )
+
+    keep = labels[offset : offset + frames]
+    for stale in labels[:offset] + labels[offset + frames :]:
+        stale.unlink()
+
+    masks = sorted(labels_dir.glob("instance_*.png"))
+    keep_masks = masks[offset : offset + frames] if masks else []
+    for stale in (masks[:offset] + masks[offset + frames :]) if masks else []:
+        stale.unlink()
+
+    _renumber(keep, "bboxes_{:06d}.json")
+    _renumber(keep_masks, "instance_{:06d}.png")
+    return offset
+
+
+def _trim_modalities(cosmos_dir: Path, frames: int) -> None:
+    for modality in COSMOS_MODALITIES:
+        for directory in cosmos_dir.rglob(modality):
+            if not directory.is_dir():
+                continue
+            for stale in sorted(directory.glob("*.png"))[frames:]:
+                stale.unlink()
+
+
+def _renumber(paths_in_order: list[Path], template: str) -> None:
+    """Two-pass rename so shifting down cannot overwrite a file not yet moved."""
+    staged = []
+    for path in paths_in_order:
+        temporary = path.with_name(f".realign_{path.name}")
+        path.rename(temporary)
+        staged.append(temporary)
+    for index, temporary in enumerate(staged):
+        temporary.rename(temporary.with_name(template.format(index)))
 
 
 def _remove_tree(path: Path) -> None:

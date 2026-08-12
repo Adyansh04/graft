@@ -23,6 +23,12 @@ uv venv --clear .venv-isaac --python "${ISAAC_SIM_PYTHON_VERSION}"
 # exist on NVIDIA's index but only at versions isaacsim does not want. uv's
 # default is to resolve a package from the first index that has it, which
 # makes those unsatisfiable, so it has to consider both.
+# Isaac Sim prompts for the Omniverse EULA on first launch and fails with
+# EOF when run non-interactively. Accepted by the repository owner on
+# 2026-08-12; override by exporting OMNI_KIT_ACCEPT_EULA=N.
+# https://docs.omniverse.nvidia.com/platform/latest/common/NVIDIA_Omniverse_License_Agreement.html
+export OMNI_KIT_ACCEPT_EULA="${OMNI_KIT_ACCEPT_EULA:-YES}"
+
 # The extension-cache wheels are multi-GB and exceed uv's default 30s HTTP
 # timeout on an average connection.
 export UV_HTTP_TIMEOUT="${UV_HTTP_TIMEOUT:-1800}"

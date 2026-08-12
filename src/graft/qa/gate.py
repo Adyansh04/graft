@@ -41,19 +41,25 @@ class QaReport:
         }
 
     def render(self) -> str:
+        from graft import console
+
+        rate = f"{self.rejection_rate:.1%}"
+        painted_rate = console.warn(rate) if self.rejection_rate > 0.1 else console.ok(rate)
         lines = [
-            f"checked {self.checked} frame(s), quarantined {len(self.quarantined)} "
-            f"({self.rejection_rate:.1%})"
+            f"checked {console.value(str(self.checked))} frame(s), quarantined "
+            f"{console.value(str(len(self.quarantined)))} ({painted_rate})"
         ]
         for reason, count in sorted(self.by_reason.items()):
-            lines.append(f"  {reason}: {count}")
+            lines.append(f"  {console.warn(reason)}: {count}")
         # NVIDIA's own Cosmos SDG work reports around 3% rejection. An order
         # of magnitude more usually means the generation config is wrong
         # rather than the filter being strict.
         if self.rejection_rate > 0.3:
             lines.append(
-                "  rejection rate is high — check the render or Cosmos settings "
-                "before assuming the thresholds are wrong"
+                console.warn(
+                    "  rejection rate is high — check the render or Cosmos settings "
+                    "before assuming the thresholds are wrong"
+                )
             )
         return "\n".join(lines)
 

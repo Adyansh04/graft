@@ -42,7 +42,10 @@ class Finding:
     message: str
 
     def render(self) -> str:
-        return f"  [{self.level:<7}] {self.code}: {self.message}"
+        from graft import console
+
+        painter = console.fail if self.level == "error" else console.warn
+        return f"  [{painter(self.level):<7}] {console.bold(self.code)}: {self.message}"
 
 
 @dataclass
@@ -70,17 +73,26 @@ class ValidationReport:
         return not self.errors
 
     def render(self) -> str:
-        lines = [f"asset: {self.usd_path}", f"target: {self.target_prim_path}"]
+        from graft import console
+
+        lines = [
+            f"{console.dim('asset:')} {self.usd_path}",
+            f"{console.dim('target:')} {self.target_prim_path}",
+        ]
         if self.meters_per_unit is not None:
-            lines.append(f"metersPerUnit: {self.meters_per_unit}   upAxis: {self.up_axis}")
+            lines.append(
+                f"{console.dim('metersPerUnit:')} {self.meters_per_unit}   "
+                f"{console.dim('upAxis:')} {self.up_axis}"
+            )
         if self.size_m is not None:
             x, y, z = self.size_m
-            lines.append(f"size: {x:.3f} x {y:.3f} x {z:.3f} m")
+            lines.append(f"{console.dim('size:')} {console.value(f'{x:.3f} x {y:.3f} x {z:.3f} m')}")
         if self.findings:
             lines.append("")
             lines.extend(f.render() for f in self.findings)
-        verdict = "PASS" if self.ok else "FAIL"
-        lines.append(f"\n{verdict} — {len(self.errors)} error(s), {len(self.warnings)} warning(s)")
+        verdict = console.ok("PASS") if self.ok else console.fail("FAIL")
+        counts = f"{len(self.errors)} error(s), {len(self.warnings)} warning(s)"
+        lines.append(f"\n{verdict} {console.dim('—')} {counts}")
         return "\n".join(lines)
 
 

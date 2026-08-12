@@ -28,8 +28,10 @@ def _git_sha() -> str | None:
 def cmd_doctor(args: argparse.Namespace) -> int:
     from graft.env import check_environment
 
+    from graft import console
+
     checks = check_environment()
-    print("graft doctor")
+    print(console.heading("graft doctor"))
     for check in checks:
         print(check.render())
     failed = [c for c in checks if not c.ok]
@@ -37,12 +39,15 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     # reported but does not fail the check.
     blocking = [c for c in failed if not c.name.startswith("isaac")]
     if blocking:
-        print(f"\n{len(blocking)} blocking issue(s).")
+        print("\n" + console.fail(f"{len(blocking)} blocking issue(s)."))
         return 1
     if failed:
-        print(f"\n{len(failed)} non-blocking issue(s) (Isaac Sim env not set up yet).")
+        print(
+            "\n"
+            + console.warn(f"{len(failed)} non-blocking issue(s) (Isaac Sim env not set up yet).")
+        )
     else:
-        print("\nAll checks passed.")
+        print("\n" + console.ok("All checks passed."))
     return 0
 
 
@@ -86,27 +91,38 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(f"No run at {paths.root}. Run 'graft run init' first.", file=sys.stderr)
         return 1
 
+    from graft import console
+
+    palette = {
+        "done": console.ok,
+        "running": console.info,
+        "failed": console.fail,
+        "pending": console.dim,
+    }
+
     manifest = Manifest.load(paths.manifest)
-    print(f"run: {manifest.run_name}   ({paths.root})")
-    print(f"created: {manifest.created_at}   graft: {manifest.graft_git_sha or 'unknown'}")
-    print("\nstages:")
+    print(f"{console.heading(manifest.run_name)}   {console.dim(str(paths.root))}")
+    print(console.dim(f"created {manifest.created_at}   graft {manifest.graft_git_sha or 'unknown'}"))
+    print("\n" + console.bold("stages:"))
     for stage in Stage:
         state = manifest.stages[stage]
-        detail = f"  — {state.detail}" if state.detail else ""
-        print(f"  {stage.value:<15} {state.status.value}{detail}")
+        paint = palette.get(state.status.value, console.dim)
+        detail = console.dim(f"  — {state.detail}") if state.detail else ""
+        print(f"  {stage.value:<15} {paint(state.status.value)}{detail}")
 
     expected = config.capture.frames_per_clip
     complete = manifest.completed_clips(paths, expected)
     present = paths.existing_clips()
     if present:
         partial = sorted(set(present) - complete)
-        print(f"\nclips: {len(complete)}/{config.capture.n_clips} complete")
+        done = console.ok if len(complete) == config.capture.n_clips else console.info
+        print(f"\n{console.bold('clips:')} {done(f'{len(complete)}/{config.capture.n_clips}')} complete")
         if partial:
-            print(f"  partial (will be re-rendered on resume): {partial}")
+            print(console.warn(f"  partial (will be re-rendered on resume): {partial}"))
 
     size = _dir_size_mb(paths.root)
     if size is not None:
-        print(f"\ndisk: {size:.0f} MB")
+        print(f"\n{console.dim('disk:')} {size:.0f} MB")
     return 0
 
 
@@ -121,12 +137,17 @@ def cmd_validate(args: argparse.Namespace) -> int:
     """Validate the config alone. Cheap gate before a long GPU job."""
     from graft.config.loader import load_config
 
+    from graft import console
+
     config = load_config(args.config)
-    print(f"config OK: {args.config}")
-    print(f"  run: {config.run.name}   seed: {config.run.seed}")
-    print(f"  asset: {config.asset.usd_path} @ {config.asset.target_prim_path}")
-    print(f"  classes: {config.class_names()}")
-    print(f"  render: {tuple(config.sim.resolution)} x {config.capture.frames_per_clip} frames/clip")
+    print(f"{console.ok('config OK')} {console.dim(str(args.config))}")
+    print(f"  {console.dim('run:')} {config.run.name}   {console.dim('seed:')} {config.run.seed}")
+    print(f"  {console.dim('asset:')} {config.asset.usd_path} @ {config.asset.target_prim_path}")
+    print(f"  {console.dim('classes:')} {config.class_names()}")
+    print(
+        f"  {console.dim('render:')} {tuple(config.sim.resolution)} x "
+        f"{config.capture.frames_per_clip} frames/clip"
+    )
     return 0
 
 
@@ -426,10 +447,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    from graft import console
+
     try:
         return args.func(args)
     except (FileNotFoundError, ValueError, KeyError, RuntimeError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        print(f"{console.paint('error', 'red', 'bold', stream=sys.stderr)}: {exc}", file=sys.stderr)
         return 1
 
 

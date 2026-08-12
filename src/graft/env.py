@@ -41,7 +41,11 @@ class Check:
     detail: str
 
     def render(self) -> str:
-        return f"  [{'ok' if self.ok else 'FAIL'}] {self.name}: {self.detail}"
+        from graft import console
+
+        tag = console.status(self.ok)
+        detail = self.detail if self.ok else console.warn(self.detail)
+        return f"  [{tag}] {console.bold(self.name)}: {detail}"
 
 
 def free_gb(path: Path) -> float:

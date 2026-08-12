@@ -50,17 +50,23 @@ def evaluate(config: Config, paths: RunPaths, weights: Path) -> dict:
 
 
 def render(payload: dict) -> str:
+    from graft import console
+
+    nan = float("nan")
     lines = []
     for target, data in payload.get("targets", {}).items():
         metrics = data["metrics"]
-        lines.append(
-            f"{target:<14} mAP50={metrics.get('map50', float('nan')):.4f}  "
-            f"mAP50-95={metrics.get('map50_95', float('nan')):.4f}  "
-            f"({data['images']} images)"
-        )
+        map50 = console.value(format(metrics.get("map50", nan), ".4f"))
+        map50_95 = console.value(format(metrics.get("map50_95", nan), ".4f"))
+        images = console.dim(f"({data['images']} images)")
+        # The real-photo number is the baseline; sim-val is a diagnostic.
+        name = console.heading(target) if target == "real-photos" else console.dim(target)
+        lines.append(f"{name:<24} mAP50={map50}  mAP50-95={map50_95}  {images}")
     if "real-photos" not in payload.get("targets", {}):
         lines.append(
-            "no real-photo score — sim-val alone measures whether training "
-            "converged, not whether the detector works"
+            console.warn(
+                "no real-photo score — sim-val alone measures whether training "
+                "converged, not whether the detector works"
+            )
         )
     return "\n".join(lines)

@@ -18,6 +18,7 @@ ISAAC_ROOTS = {"omni", "isaacsim", "pxr", "carb", "usdrt"}
 ISAAC_ONLY = {
     "sim/bootstrap.py",
     "sim/capture.py",
+    "sim/probe.py",
     "sim/scene.py",
     "sim/settle.py",
     "sim/semantics.py",

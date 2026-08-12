@@ -149,6 +149,27 @@ def cmd_asset_validate(args: argparse.Namespace) -> int:
     return 0 if report.ok else 1
 
 
+def cmd_sim_probe(args: argparse.Namespace) -> int:
+    from graft.config.loader import load_config
+    from graft.env import run_in_isaac
+    from graft.run.paths import RunPaths
+
+    config = load_config(args.config)
+    paths = RunPaths.for_run(config.run.out_root, config.run.name)
+    out = paths.root / "probe"
+    out.mkdir(parents=True, exist_ok=True)
+
+    probe_args = [
+        "--usd", config.asset.usd_path,
+        "--prim", config.asset.target_prim_path,
+        "--class-name", config.classes[0].name,
+        "--out", str(out),
+    ]
+    if args.gui:
+        probe_args.append("--gui")
+    return run_in_isaac("graft.sim.probe", probe_args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="graft", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -171,6 +192,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     status = with_config(sub.add_parser("status", help="show stage and clip progress"))
     status.set_defaults(func=cmd_status)
+
+    sim = sub.add_parser("sim", help="Isaac Sim stages")
+    sim_sub = sim.add_subparsers(dest="sim_command", required=True)
+    sim_probe = with_config(
+        sim_sub.add_parser("probe", help="report what the installed Isaac Sim actually does")
+    )
+    sim_probe.add_argument("--gui", action="store_true", help="show the UI instead of headless")
+    sim_probe.set_defaults(func=cmd_sim_probe)
 
     asset = sub.add_parser("asset", help="asset intake")
     asset_sub = asset.add_subparsers(dest="asset_command", required=True)

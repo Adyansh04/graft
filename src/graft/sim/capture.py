@@ -170,15 +170,36 @@ def _render_clip(app, config, paths: RunPaths, index: int, seed: int, frames: in
             _assert_labels_took(clip_dir, config.classes[0].name)
 
     rep.orchestrator.wait_until_complete()
-    # Standalone runs can skip mp4 generation unless the app is pumped
-    # before detach.
-    bootstrap.advance(app, 10)
+    # CosmosWriter's output lags the capture loop; detaching too early
+    # truncates the tail of the clip and loses the mp4s entirely.
+    _flush_writer_output(app, clip_dir / "cosmos", frames)
     cosmos_writer.detach()
     label_writer.detach()
     render_product.destroy()
     scene.clear_dynamic_prims(dynamic)
 
     _finalise_clip(paths, index, seed, frames, params)
+
+
+def _flush_writer_output(app, cosmos_dir: Path, expected: int, max_updates: int = 600) -> int:
+    """Pump the app until the writer stops producing frames.
+
+    A fixed update count is a guess that silently truncates the clip when it
+    is too small, so this waits for the count to reach `expected` or stop
+    growing.
+    """
+    stalled = 0
+    written = 0
+    for _ in range(max_updates):
+        bootstrap.advance(app, 5)
+        current = len(list(cosmos_dir.rglob("rgb/*.png")))
+        if current >= expected:
+            return current
+        stalled = stalled + 1 if current == written else 0
+        written = current
+        if stalled >= 12:
+            break
+    return written
 
 
 def _apply_scene(params: SceneParams, config) -> list[str]:

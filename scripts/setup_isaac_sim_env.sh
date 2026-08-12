@@ -17,12 +17,16 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ISAAC_SIM_PYTHON_VERSION="3.12"
 ISAAC_SIM_INDEX="https://pypi.nvidia.com"
 
-uv venv .venv-isaac --python "${ISAAC_SIM_PYTHON_VERSION}"
+uv venv --clear .venv-isaac --python "${ISAAC_SIM_PYTHON_VERSION}"
 
 # isaacsim's dependencies straddle pypi.nvidia.com and PyPI — some packages
 # exist on NVIDIA's index but only at versions isaacsim does not want. uv's
 # default is to resolve a package from the first index that has it, which
 # makes those unsatisfiable, so it has to consider both.
+# The extension-cache wheels are multi-GB and exceed uv's default 30s HTTP
+# timeout on an average connection.
+export UV_HTTP_TIMEOUT="${UV_HTTP_TIMEOUT:-1800}"
+
 # --prerelease=allow: some isaacsim dependencies are pinned to release
 # candidates (tinyobjloader==2.0.0rc13).
 uv pip install --python .venv-isaac \

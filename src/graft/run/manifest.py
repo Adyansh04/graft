@@ -51,7 +51,11 @@ STAGE_DEPS: dict[Stage, tuple[Stage, ...]] = {
     Stage.ENCODE: (Stage.CAPTURE,),
     Stage.COSMOS_EXPORT: (Stage.ENCODE,),
     Stage.COSMOS_IMPORT: (Stage.COSMOS_EXPORT,),
-    Stage.QA: (Stage.CAPTURE,),
+    # QA gates both sim frames and restyled ones, so it depends on both
+    # branches. The cosmos edge holds even when dataset.sources is ["sim"]:
+    # over-invalidating a cheap stage is the right failure mode, and the
+    # alternative is stale QA results surviving a Cosmos config change.
+    Stage.QA: (Stage.CAPTURE, Stage.COSMOS_IMPORT),
     Stage.ASSEMBLE: (Stage.QA,),
     Stage.TRAIN: (Stage.ASSEMBLE,),
     Stage.EVAL: (Stage.TRAIN,),

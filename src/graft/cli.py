@@ -204,8 +204,13 @@ def cmd_capture(args: argparse.Namespace) -> int:
         return 1
 
     manifest = Manifest.load(paths.manifest)
-    if manifest.is_done(Stage.CAPTURE) and not args.force:
-        print("capture already done; use --force to re-render")
+    frames = config.capture.frames_per_clip
+    total = config.capture.n_clips
+    # Gate on how many clips actually verified, not the stage flag: a
+    # --clips subset run must not mark the whole stage finished.
+    already = len(manifest.completed_clips(paths, frames))
+    if already >= total and not args.force:
+        print(f"all {total} clips already complete; use --force to re-render")
         return 0
     if args.force:
         manifest.force(Stage.CAPTURE)
@@ -222,13 +227,12 @@ def cmd_capture(args: argparse.Namespace) -> int:
     code = run_in_isaac("graft.sim.capture", capture_args)
 
     manifest = Manifest.load(paths.manifest)
-    complete = manifest.completed_clips(paths, config.capture.frames_per_clip)
-    expected = args.clips or config.capture.n_clips
-    if code == 0 and len(complete) >= expected:
+    complete = manifest.completed_clips(paths, frames)
+    if code == 0 and len(complete) >= total:
         manifest.mark(Stage.CAPTURE, Status.DONE, f"{len(complete)} clips", now=_now())
     else:
         manifest.mark(
-            Stage.CAPTURE, Status.FAILED, f"{len(complete)}/{expected} clips", now=_now()
+            Stage.CAPTURE, Status.FAILED, f"{len(complete)}/{total} clips", now=_now()
         )
     manifest.save(paths.manifest)
     return code
@@ -367,6 +371,34 @@ def cmd_cosmos_import(args: argparse.Namespace) -> int:
     return _run_stage(args, Stage.COSMOS_IMPORT, work)
 
 
+def cmd_clean(args: argparse.Namespace) -> int:
+    from graft.config.loader import load_config
+    from graft.dataset.prune import prune_control_frames
+    from graft.run.paths import RunPaths
+
+    if not args.controls:
+        print(
+            "nothing selected. Use --controls to delete the control-modality "
+            "frames already captured as video (add --dry-run to preview).",
+            file=sys.stderr,
+        )
+        return 1
+
+    config = load_config(args.config)
+    paths = RunPaths.for_run(config.run.out_root, config.run.name)
+    if not paths.clips.is_dir():
+        print(f"no clips at {paths.clips}", file=sys.stderr)
+        return 1
+
+    result = prune_control_frames(
+        paths, config.capture.frames_per_clip, dry_run=args.dry_run
+    )
+    if args.dry_run:
+        print("(dry run — nothing deleted)")
+    print(result.render())
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="graft", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -417,6 +449,15 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--force", action="store_true", help="redo a completed stage")
     evaluate.add_argument("--weights", help="override the weights path")
     evaluate.set_defaults(func=cmd_eval)
+
+    clean = with_config(
+        sub.add_parser("clean", help="delete control frames already captured as video")
+    )
+    clean.add_argument(
+        "--controls", action="store_true", help="prune the control modality frames"
+    )
+    clean.add_argument("--dry-run", action="store_true", help="report without deleting")
+    clean.set_defaults(func=cmd_clean)
 
     cosmos = sub.add_parser("cosmos", help="Cosmos Transfer augmentation")
     cosmos_sub = cosmos.add_subparsers(dest="cosmos_command", required=True)

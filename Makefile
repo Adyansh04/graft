@@ -26,5 +26,25 @@ init: ## Create the run directory and snapshot the config
 status: ## Show stage and clip progress
 	uv run graft status --config $(CONFIG)
 
+probe: ## Report what the installed Isaac Sim actually does
+	uv run graft sim probe --config $(CONFIG)
+
+capture: ## Render clips in Isaac Sim (headless)
+	uv run graft capture --config $(CONFIG)
+
+qa: ## Check rendered frames and record quarantines
+	uv run graft qa --config $(CONFIG)
+
+assemble: ## Build the image dataset from captured clips
+	uv run graft assemble --config $(CONFIG)
+
+train: ## Train the detector
+	uv run graft train --config $(CONFIG)
+
+eval: ## Score on sim-val and real photos
+	uv run graft eval --config $(CONFIG)
+
+pipeline-sim: init capture qa assemble train eval ## USD to trained weights, one command
+
 clean-pyc:
 	find . -name '__pycache__' -type d -prune -exec rm -rf {} +

@@ -213,6 +213,109 @@ def cmd_capture(args: argparse.Namespace) -> int:
     return code
 
 
+def _run_stage(args, stage, work):
+    """Load the run, mark the stage, run `work`, record the outcome."""
+    from graft.config.loader import load_config
+    from graft.run.manifest import Manifest, Status
+    from graft.run.paths import RunPaths
+
+    config = load_config(args.config)
+    paths = RunPaths.for_run(config.run.out_root, config.run.name)
+    if not paths.manifest.exists():
+        print("No run initialised. Run 'graft run init' first.", file=sys.stderr)
+        return 1
+
+    manifest = Manifest.load(paths.manifest)
+    if manifest.is_done(stage) and not getattr(args, "force", False):
+        print(f"{stage.value} already done; use --force to redo it")
+        return 0
+    if getattr(args, "force", False):
+        manifest.force(stage)
+
+    manifest.mark(stage, Status.RUNNING, now=_now())
+    manifest.save(paths.manifest)
+    try:
+        detail = work(config, paths)
+    except Exception as exc:  # noqa: BLE001 - record the failure, then surface it
+        manifest = Manifest.load(paths.manifest)
+        manifest.mark(stage, Status.FAILED, str(exc), now=_now())
+        manifest.save(paths.manifest)
+        raise
+
+    manifest = Manifest.load(paths.manifest)
+    manifest.mark(stage, Status.DONE, detail, now=_now())
+    manifest.save(paths.manifest)
+    return 0
+
+
+def cmd_qa(args: argparse.Namespace) -> int:
+    from graft.qa.gate import run_qa
+    from graft.run.manifest import Stage
+
+    def work(config, paths):
+        report = run_qa(config, paths)
+        print(report.render())
+        return f"{len(report.quarantined)}/{report.checked} quarantined"
+
+    return _run_stage(args, Stage.QA, work)
+
+
+def cmd_assemble(args: argparse.Namespace) -> int:
+    from graft.run.manifest import Stage
+
+    def work(config, paths):
+        import graft.dataset.formats.yolo_detect  # noqa: F401
+        import graft.dataset.formats.yolo_seg  # noqa: F401
+        from graft.dataset.assemble import assemble
+
+        result = assemble(config, paths)
+        print(result.render())
+        return ", ".join(f"{k}={v}" for k, v in sorted(result.counts.items()))
+
+    return _run_stage(args, Stage.ASSEMBLE, work)
+
+
+def cmd_train(args: argparse.Namespace) -> int:
+    from graft.run.manifest import Stage
+
+    def work(config, paths):
+        import graft.train.ultralytics_backend  # noqa: F401
+        from graft.train.base import get_trainer
+
+        dataset_yaml = paths.dataset / "dataset.yaml"
+        if not dataset_yaml.is_file():
+            raise RuntimeError(f"{dataset_yaml} missing; run 'graft assemble' first")
+
+        result = get_trainer("ultralytics").train(
+            dataset_yaml,
+            paths.weights,
+            model=config.train.model,
+            epochs=config.train.epochs,
+            imgsz=config.train.imgsz,
+            batch=config.train.batch,
+        )
+        print(f"weights: {result.weights}")
+        return f"{result.epochs} epochs, {config.train.model}"
+
+    return _run_stage(args, Stage.TRAIN, work)
+
+
+def cmd_eval(args: argparse.Namespace) -> int:
+    from graft.run.manifest import Stage
+
+    def work(config, paths):
+        from graft.eval.evaluate import evaluate, render
+
+        weights = Path(args.weights) if args.weights else paths.weights / "train" / "weights" / "best.pt"
+        if not weights.is_file():
+            raise RuntimeError(f"weights not found at {weights}; run 'graft train' first")
+        payload = evaluate(config, paths, weights)
+        print(render(payload))
+        return ", ".join(payload.get("targets", {}))
+
+    return _run_stage(args, Stage.EVAL, work)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="graft", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -249,6 +352,20 @@ def build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--clips", type=int, help="override the configured clip count")
     capture.add_argument("--force", action="store_true", help="re-render completed clips")
     capture.set_defaults(func=cmd_capture)
+
+    for name, help_text, handler in (
+        ("qa", "check rendered frames and record quarantines", cmd_qa),
+        ("assemble", "build the image dataset from captured clips", cmd_assemble),
+        ("train", "train the detector", cmd_train),
+    ):
+        stage_parser = with_config(sub.add_parser(name, help=help_text))
+        stage_parser.add_argument("--force", action="store_true", help="redo a completed stage")
+        stage_parser.set_defaults(func=handler)
+
+    evaluate = with_config(sub.add_parser("eval", help="score the model on sim-val and real photos"))
+    evaluate.add_argument("--force", action="store_true", help="redo a completed stage")
+    evaluate.add_argument("--weights", help="override the weights path")
+    evaluate.set_defaults(func=cmd_eval)
 
     asset = sub.add_parser("asset", help="asset intake")
     asset_sub = asset.add_subparsers(dest="asset_command", required=True)

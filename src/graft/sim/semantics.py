@@ -29,7 +29,7 @@ def strip_foreign_labels(keep_prim_path: str) -> int:
     Returns how many prims were stripped.
     """
     import omni.usd
-    from isaacsim.core.experimental.utils.semantics import get_labels, remove_labels
+    from isaacsim.core.experimental.utils.semantics import get_labels, remove_all_labels
     from pxr import Usd
 
     stage = omni.usd.get_context().get_stage()
@@ -47,7 +47,9 @@ def strip_foreign_labels(keep_prim_path: str) -> int:
         try:
             if not get_labels(prim):
                 continue
-            remove_labels(prim, include_descendants=False)
+            # remove_labels requires naming the labels; this drops all of
+            # them, which is the point.
+            remove_all_labels(prim)
             stripped += 1
         except Exception:  # noqa: BLE001 - prim may not support labels at all
             continue

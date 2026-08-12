@@ -69,7 +69,9 @@ def _prepare_stage(app, config) -> None:
     bootstrap.prepare_replicator()
 
     scene.build_static_scene()
-    add_reference_to_stage(usd_path=config.asset.usd_path, prim_path=TARGET_PRIM)
+    add_reference_to_stage(
+        usd_path=str(Path(config.asset.usd_path).resolve()), prim_path=TARGET_PRIM
+    )
     bootstrap.advance(app, 10)
 
     class_name = config.classes[0].name
@@ -79,7 +81,7 @@ def _prepare_stage(app, config) -> None:
 
     import omni.replicator.core as rep
 
-    rep.functional.physics.apply_rigid_body(TARGET_PRIM, with_collider=True)
+    rep.functional.physics.apply_rigid_body(_prim(TARGET_PRIM), with_collider=True)
 
 
 def _render_clip(app, config, paths: RunPaths, index: int, seed: int, frames: int) -> None:
@@ -149,7 +151,7 @@ def _apply_scene(params: SceneParams, config) -> list[str]:
 
     from graft.sim import scene
 
-    scene.apply_lighting(params)
+    lights = scene.apply_lighting(params)
     distractor_dir = config.capture.randomizers.distractors.pool_dir
     usds = sorted(str(p) for p in Path(distractor_dir).glob("*.usd")) if distractor_dir else []
     placed = scene.place_distractors(params, usds)
@@ -159,7 +161,7 @@ def _apply_scene(params: SceneParams, config) -> list[str]:
         position_value=params.target_drop.position,
         rotation_value=params.target_drop.rotation_deg,
     )
-    return placed + [scene.DOME_PATH]
+    return lights + placed
 
 
 def _prim(path: str):
@@ -172,7 +174,9 @@ def _attach_cosmos_writer(clip_dir: Path, config):
     import omni.replicator.core as rep
 
     backend = rep.backends.get("DiskBackend")
-    backend.initialize(output_dir=str(clip_dir / "cosmos"))
+    # Absolute: DiskBackend resolves a relative path against Replicator's own
+    # default output root (~/omni.replicator_out), not the process CWD.
+    backend.initialize(output_dir=str((clip_dir / "cosmos").resolve()))
     writer = rep.WriterRegistry.get("CosmosWriter")
     writer.initialize(
         backend=backend,

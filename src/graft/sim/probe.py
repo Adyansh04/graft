@@ -29,23 +29,34 @@ def main(argv: list[str] | None = None) -> int:
 
     from graft.sim import bootstrap
 
-    app = bootstrap.launch(headless=not args.gui)
-    findings: dict = {"usd": args.usd, "prim": args.prim}
-    try:
-        findings.update(_probe(app, args))
-    finally:
-        app.close()
-
-    out = Path(args.out)
+    # SimulationApp.close() does not return, so the report is written before
+    # it and after every step that could fail.
+    out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     report = out / "probe.json"
-    report.write_text(json.dumps(findings, indent=2, default=str))
+
+    findings: dict = {"usd": args.usd, "prim": args.prim}
+
+    def save() -> None:
+        report.write_text(json.dumps(findings, indent=2, default=str))
+
+    save()
+    app = bootstrap.launch(headless=not args.gui)
+    try:
+        _probe(app, args, findings, save)
+    except Exception as exc:  # noqa: BLE001 - a probe records failures
+        findings["fatal"] = repr(exc)
+        import traceback
+
+        findings["traceback"] = traceback.format_exc()
+    save()
     print(f"\nprobe report: {report}")
     print(json.dumps(findings, indent=2, default=str))
+    app.close()
     return 0
 
 
-def _probe(app, args) -> dict:
+def _probe(app, args, findings: dict, save) -> None:
     import omni.replicator.core as rep
     import omni.usd
     from isaacsim.core.utils.stage import add_reference_to_stage
@@ -56,27 +67,29 @@ def _probe(app, args) -> dict:
     bootstrap.apply_render_settings()
     bootstrap.prepare_replicator()
 
-    findings: dict = {}
     findings["isaacsim_version"] = _version()
     findings["replicator_version"] = getattr(rep, "__version__", "unknown")
+    save()
 
-    add_reference_to_stage(usd_path=args.usd, prim_path="/World/Target")
+    add_reference_to_stage(usd_path=str(Path(args.usd).resolve()), prim_path="/World/Target")
     stage = omni.usd.get_context().get_stage()
     bootstrap.advance(app, 10)
 
     findings["semantics_api"] = _apply_semantics(stage, "/World/Target", args.class_name)
-    findings["physics_api"] = _apply_physics("/World/Target")
+    findings["physics_api"] = _apply_physics(stage, "/World/Target")
 
     prim = stage.GetPrimAtPath("/World/Target")
     findings["mesh_count"] = sum(
         1 for p in Usd.PrimRange(prim, Usd.TraverseInstanceProxies()) if p.GetTypeName() == "Mesh"
     )
+    save()
 
-    camera = rep.create.camera(position=(0.6, 0.6, 0.4), look_at=(0.0, 0.0, 0.0))
+    camera = rep.functional.create.camera(position=(0.6, 0.6, 0.4), look_at=(0.0, 0.0, 0.0))
     render_product = rep.create.render_product(camera, (1280, 704))
     findings["annotators"] = _probe_annotators(app, render_product)
-    findings["cosmos_writer"] = _probe_cosmos_writer(app, render_product, Path(args.out))
-    return findings
+    save()
+    findings["cosmos_writer"] = _probe_cosmos_writer(app, render_product, Path(args.out).resolve())
+    save()
 
 
 def _version() -> str:
@@ -113,12 +126,15 @@ def _apply_semantics(stage, prim_path: str, class_name: str) -> dict:
     return attempts
 
 
-def _apply_physics(prim_path: str) -> dict:
+def _apply_physics(stage, prim_path: str) -> dict:
     attempts = {}
     try:
         import omni.replicator.core as rep
 
-        rep.functional.physics.apply_rigid_body(prim_path, with_collider=True)
+        # Takes prim objects, not path strings.
+        rep.functional.physics.apply_rigid_body(
+            stage.GetPrimAtPath(prim_path), with_collider=True
+        )
         attempts["rep.functional.physics.apply_rigid_body"] = "ok"
     except Exception as exc:  # noqa: BLE001
         attempts["rep.functional.physics.apply_rigid_body"] = repr(exc)
@@ -184,7 +200,9 @@ def _probe_cosmos_writer(app, render_product, out_dir: Path) -> dict:
 
     from graft.sim import bootstrap
 
-    target = out_dir / "cosmos_probe"
+    # Absolute: DiskBackend resolves a relative path against Replicator's own
+    # default output root, not the process CWD.
+    target = (out_dir / "cosmos_probe").resolve()
     result: dict = {"output_dir": str(target)}
     try:
         writer = rep.WriterRegistry.get("CosmosWriter")

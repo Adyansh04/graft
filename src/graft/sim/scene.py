@@ -23,28 +23,31 @@ def build_static_scene(ground_size_m: float = 4.0) -> None:
     rep.functional.physics.apply_collider(ground)
 
 
-def apply_lighting(params: SceneParams) -> None:
+def apply_lighting(params: SceneParams) -> list[str]:
+    """Returns the paths of the lights created, for per-clip teardown."""
     import omni.replicator.core as rep
 
-    dome = rep.functional.create.light(
-        light_type="Dome",
+    created = []
+    dome = rep.functional.create.dome_light(
         intensity=params.lighting.dome_intensity,
         rotation=(0.0, 0.0, params.lighting.dome_rotation_deg),
         name="DomeLight",
         parent="/World",
     )
+    created.append(_path_of(dome))
+
     for index, light in enumerate(params.lighting.area_lights):
         if not light.enabled:
             continue
-        rep.functional.create.light(
-            light_type="Rect",
+        prim = rep.functional.create.rect_light(
             intensity=light.intensity,
             color=light.color,
             position=light.position,
             name=f"AreaLight_{index}",
             parent="/World",
         )
-    return dome
+        created.append(_path_of(prim))
+    return [p for p in created if p]
 
 
 def place_distractors(params: SceneParams, distractor_usds: list[str]) -> list[str]:
@@ -61,14 +64,30 @@ def place_distractors(params: SceneParams, distractor_usds: list[str]) -> list[s
     placed = []
     for index, placement in enumerate(params.distractors):
         usd = distractor_usds[index % len(distractor_usds)]
-        path = f"{DISTRACTOR_ROOT}/Distractor_{index}"
-        prim = rep.functional.create.from_usd(usd, path=path)
-        rep.functional.modify.pose(
-            prim, position_value=placement.position, rotation_value=placement.rotation_deg
+        prim = rep.functional.create.reference(
+            usd_path=usd,
+            name=f"Distractor_{index}",
+            parent=DISTRACTOR_ROOT,
+            position=placement.position,
+            rotation=placement.rotation_deg,
         )
         rep.functional.physics.apply_rigid_body(prim, with_collider=True)
-        placed.append(path)
+        path = _path_of(prim)
+        if path:
+            placed.append(path)
     return placed
+
+
+def _path_of(created) -> str | None:
+    """rep.functional.create.* returns a prim or a list of them."""
+    if created is None:
+        return None
+    if isinstance(created, (list, tuple)):
+        created = created[0] if created else None
+    if created is None:
+        return None
+    getter = getattr(created, "GetPath", None)
+    return str(getter()) if getter else str(created)
 
 
 def clear_dynamic_prims(paths: list[str]) -> None:

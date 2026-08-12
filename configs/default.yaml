@@ -12,7 +12,7 @@ asset:
   # NVIDIA SimReady coffee mug: native USD, split PBR maps (albedo/normal/ORM),
   # physics preauthored. Download separately — *.usd is gitignored.
   usd_path: assets/Coffee_Mug_A01/sm_rc_dishware_mug_coffee_a01.usd
-  target_prim_path: /World/Mug
+  target_prim_path: /RootNode/Geometry
   expected_size_m: [0.05, 0.20]
 
 # Class id is the index here. This ordering is shared by the segmentation

@@ -31,3 +31,15 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# ROS 2 packages leak in via PYTHONPATH (/opt/ros/jazzy, colcon install
+# dirs) and register pytest11 entry points. Auto-loading them breaks every
+# pytest run outside a ROS workspace with missing-module errors.
+addopts = [
+    "-p no:launch_testing",
+    "-p no:launch_ros",
+    "-p no:ament_lint",
+    "-p no:ament_flake8",
+    "-p no:ament_pep257",
+    "-p no:ament_xmllint",
+    "-p no:ament_copyright",
+]

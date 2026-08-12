@@ -170,6 +170,49 @@ def cmd_sim_probe(args: argparse.Namespace) -> int:
     return run_in_isaac("graft.sim.probe", probe_args)
 
 
+def cmd_capture(args: argparse.Namespace) -> int:
+    from graft.config.loader import load_config
+    from graft.env import run_in_isaac
+    from graft.run.manifest import Manifest, Stage, Status
+    from graft.run.paths import RunPaths
+
+    config = load_config(args.config)
+    paths = RunPaths.for_run(config.run.out_root, config.run.name)
+    if not paths.manifest.exists():
+        print("No run initialised. Run 'graft run init' first.", file=sys.stderr)
+        return 1
+
+    manifest = Manifest.load(paths.manifest)
+    if manifest.is_done(Stage.CAPTURE) and not args.force:
+        print("capture already done; use --force to re-render")
+        return 0
+    if args.force:
+        manifest.force(Stage.CAPTURE)
+
+    manifest.mark(Stage.CAPTURE, Status.RUNNING, now=_now())
+    manifest.save(paths.manifest)
+
+    capture_args = ["--config", str(paths.config_snapshot), "--run-dir", str(paths.root)]
+    if args.gui:
+        capture_args.append("--gui")
+    if args.clips:
+        capture_args += ["--clips", str(args.clips)]
+
+    code = run_in_isaac("graft.sim.capture", capture_args)
+
+    manifest = Manifest.load(paths.manifest)
+    complete = manifest.completed_clips(paths, config.capture.frames_per_clip)
+    expected = args.clips or config.capture.n_clips
+    if code == 0 and len(complete) >= expected:
+        manifest.mark(Stage.CAPTURE, Status.DONE, f"{len(complete)} clips", now=_now())
+    else:
+        manifest.mark(
+            Stage.CAPTURE, Status.FAILED, f"{len(complete)}/{expected} clips", now=_now()
+        )
+    manifest.save(paths.manifest)
+    return code
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="graft", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -200,6 +243,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sim_probe.add_argument("--gui", action="store_true", help="show the UI instead of headless")
     sim_probe.set_defaults(func=cmd_sim_probe)
+
+    capture = with_config(sub.add_parser("capture", help="render clips in Isaac Sim"))
+    capture.add_argument("--gui", action="store_true", help="show the UI instead of headless")
+    capture.add_argument("--clips", type=int, help="override the configured clip count")
+    capture.add_argument("--force", action="store_true", help="re-render completed clips")
+    capture.set_defaults(func=cmd_capture)
 
     asset = sub.add_parser("asset", help="asset intake")
     asset_sub = asset.add_subparsers(dest="asset_command", required=True)

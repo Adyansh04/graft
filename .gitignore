@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Environments. Core pipeline and Isaac Sim get separate venvs — their
+# dependency stacks conflict (usd-core's bundled pxr vs Isaac's, and
+# ultralytics' torch vs isaacsim's).
+.venv/
+.venv-isaac/
+
+# Generated / regenerable pipeline artifacts. Never commit renders,
+# datasets, or trained weights — regenerate from source config instead of
+# versioning. If a handful of curated fixture assets genuinely need to be
+# tracked, add them explicitly with Git LFS rather than removing these
+# blanket rules.
+renders/
+datasets/
+runs/
+outputs/
+*.mp4
+*.mov
+*.usd
+*.usda
+*.usdc
+*.usdz
+*.pt
+*.onnx
+*.engine
+
+# Isaac Sim / Omniverse local caches
+.nvidia-omniverse/
+kit_cache/
+
+# OS
+.DS_Store
+
+.vscode/
+

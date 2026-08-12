@@ -1,0 +1,104 @@
+# GRAFT default config.
+#
+# Values marked FIXED below are external constraints, not preferences —
+# the schema rejects other values. See the schema docstrings for why.
+
+run:
+  name: mug-dev
+  seed: 0
+  out_root: runs
+
+asset:
+  # NVIDIA SimReady coffee mug: native USD, split PBR maps (albedo/normal/ORM),
+  # physics preauthored. Download separately — *.usd is gitignored.
+  usd_path: assets/Coffee_Mug_A01/sm_rc_dishware_mug_coffee_a01.usd
+  target_prim_path: /World/Mug
+  expected_size_m: [0.05, 0.20]
+
+# Class id is the index here. This ordering is shared by the segmentation
+# colours handed to CosmosWriter, the dataset `names:` list, and QA's decode.
+# Changing it invalidates existing runs.
+classes:
+  - name: mug
+    color: [0, 255, 0, 255]
+
+sim:
+  resolution: [1280, 704]   # FIXED: Cosmos landscape bucket
+  rt_subframes: 6
+  dlss_exec_mode: 2         # DLSS Quality
+  settle:
+    lin_vel_thresh: 0.1
+    ang_vel_thresh: 0.1
+    timeout_steps: 600
+
+capture:
+  n_clips: 8
+  frames_per_clip: 121      # FIXED: Cosmos hardcodes this
+  negative_clip_fraction: 0.0
+  camera:
+    orbit_degrees: 120.0
+    elevation_deg: [15.0, 45.0]
+    radius_m: [0.4, 0.9]
+  randomizers:
+    lighting:
+      dome_intensity: [300.0, 1500.0]
+      n_area_lights: [1, 3]
+      area_intensity: [10000.0, 80000.0]
+      off_probability: 0.3
+    distractors:
+      count: [0, 4]
+      pool_dir: null
+
+cosmos:
+  fps: 30
+  sigma_max: 50.0
+  guidance: 5.0
+  seed: 1
+  # Isaac Lab's validated combination. `vis` preserves the source's lighting,
+  # so lower it (or drop to depth 0.9 / seg 0.9) for heavy lighting restyle.
+  weights:
+    vis: 0.3
+    edge: 0.3
+    depth: 0.6
+    seg: 0.7
+  prompt:
+    sections_file: configs/prompts.yaml
+    invariant: >-
+      The white stoneware coffee mug at the centre of the frame is unchanged:
+      same shape, same position, same size, same smooth glazed white surface
+      with its handle turned to one side. Do not alter the mug in any way.
+
+encode:
+  crf: 12
+  preset: slow
+  pix_fmt: yuv420p
+  fps: 30
+
+dataset:
+  sources: [sim]            # becomes [sim, cosmos] once the Cosmos stage lands
+  stride: 10
+  split:
+    train: 0.8
+    val: 0.2
+    by: clip                # FIXED: frame-level splitting leaks near-duplicates
+  formats: [yolo_detect]
+
+qa:
+  blur_lap_var_min: 60.0
+  min_bbox_area_px: 64
+  cosmos:
+    in_mask_ssim_min: 0.7
+    out_mask_change_min: 0.05
+  action: quarantine
+
+train:
+  model: yolo11n.pt
+  epochs: 10
+  imgsz: 640
+  batch: 8
+
+eval:
+  sim_val: true
+  # The number that actually counts. Point this at hand-labelled photographs
+  # of the physical mug; sim-val alone would reward learning Isaac's renderer.
+  real_photos_dir: null

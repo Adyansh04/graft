@@ -59,10 +59,8 @@ def test_only_designated_modules_import_the_sim_runtime():
     )
 
 
-def test_permitted_list_matches_reality():
-    """Catches a renamed or deleted sim module leaving a stale exemption."""
-    sim_dir = SRC / "sim"
-    if not sim_dir.exists():
-        return  # sim package lands in M3
-    stale = {rel for rel in ISAAC_ONLY if not (SRC / rel).exists()}
-    assert not stale, f"exemptions for files that no longer exist: {stale}"
+def test_pure_sim_modules_stay_importable_without_isaac():
+    """Trajectory and randomization logic must run in the core venv — that is
+    what makes them testable without a GPU."""
+    import graft.sim.camera  # noqa: F401
+    import graft.sim.randomize  # noqa: F401

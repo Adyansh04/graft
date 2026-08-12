@@ -110,3 +110,22 @@ def test_sigma_max_bounds(raw_config):
     raw_config["cosmos"]["sigma_max"] = 120.0
     with pytest.raises(ValidationError):
         Config.model_validate(raw_config)
+
+
+def test_near_plane_inside_the_orbit_is_rejected(raw_config):
+    """Replicator's default near plane is 1.0 m, which is further than the
+    whole orbit — the object gets clipped and every frame renders empty."""
+    raw_config["capture"]["camera"]["clipping_range"] = [1.0, 1000.0]
+    with pytest.raises(ValidationError, match="clipped away"):
+        Config.model_validate(raw_config)
+
+
+def test_near_plane_clear_of_the_orbit_is_accepted(raw_config):
+    raw_config["capture"]["camera"]["clipping_range"] = [0.01, 1000.0]
+    assert Config.model_validate(raw_config).capture.camera.clipping_range == (0.01, 1000.0)
+
+
+def test_inverted_clipping_range_is_rejected(raw_config):
+    raw_config["capture"]["camera"]["clipping_range"] = [100.0, 1.0]
+    with pytest.raises(ValidationError, match="near, far"):
+        Config.model_validate(raw_config)

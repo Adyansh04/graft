@@ -12,15 +12,71 @@ producing an annotation.
 TAXONOMY = "class"
 
 
-def label_target(prim_path: str, class_name: str) -> None:
+def make_editable(prim_path: str) -> list[str]:
+    """Clear the instanceable flag on a subtree.
+
+    SimReady assets ship their geometry inside instanceable prims, and USD
+    refuses to author onto an instance proxy:
+
+        Cannot create prim spec at <...>; authoring to an instance proxy is
+        not allowed.
+
+    Clearing the flag turns the proxies into real prims that can carry
+    labels. Returns the paths that were changed.
+    """
+    import omni.usd
+    from pxr import Usd
+
+    stage = omni.usd.get_context().get_stage()
+    root = stage.GetPrimAtPath(prim_path)
+    if not root or not root.IsValid():
+        raise RuntimeError(f"cannot edit missing prim {prim_path}")
+
+    cleared = []
+    # Re-walk after each change: clearing one flag can expose nested
+    # instances that were invisible while the outer one was instanced.
+    while True:
+        found = [
+            p for p in Usd.PrimRange(root, Usd.TraverseInstanceProxies()) if p.IsInstance()
+        ]
+        if not found:
+            break
+        for prim in found:
+            prim.SetInstanceable(False)
+            cleared.append(str(prim.GetPath()))
+    return cleared
+
+
+def label_target(prim_path: str, class_name: str) -> list[str]:
+    """Label the target subtree.
+
+    Labels go on the meshes themselves, not only the reference root — that
+    is what the annotators actually resolve. Returns the labelled paths.
+    """
     import omni.usd
     from isaacsim.core.experimental.utils.semantics import add_labels
+    from pxr import Usd
 
     stage = omni.usd.get_context().get_stage()
     prim = stage.GetPrimAtPath(prim_path)
     if not prim or not prim.IsValid():
         raise RuntimeError(f"cannot label missing prim {prim_path}")
+
+    make_editable(prim_path)
+
+    labelled = []
     add_labels(prim, labels=[class_name], taxonomy=TAXONOMY)
+    labelled.append(str(prim.GetPath()))
+    for mesh in Usd.PrimRange(prim):
+        if mesh.GetTypeName() == "Mesh":
+            add_labels(mesh, labels=[class_name], taxonomy=TAXONOMY)
+            labelled.append(str(mesh.GetPath()))
+
+    if len(labelled) == 1:
+        raise RuntimeError(
+            f"{prim_path} contains no Mesh prims to label — annotations would be empty"
+        )
+    return labelled
 
 
 def strip_foreign_labels(keep_prim_path: str) -> int:

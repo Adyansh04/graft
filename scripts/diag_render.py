@@ -64,6 +64,10 @@ def _run(app, findings, save):
     bootstrap.prepare_replicator()
     stage = omni.usd.get_context().get_stage()
 
+    # rep.functional.create.*(parent="/World") requires /World to already
+    # exist; only add_reference_to_stage creates it implicitly.
+    UsdGeom.Xform.Define(stage, "/World")
+
     # A light, so RGB is not black for reasons unrelated to geometry.
     rep.functional.create.dome_light(intensity=1000.0, name="Dome", parent="/World")
 
@@ -71,7 +75,9 @@ def _run(app, findings, save):
     cube = rep.functional.create.cube(
         position=(0.0, 0.0, 0.0), scale=(0.1, 0.1, 0.1), name="RefCube", parent="/World"
     )
-    add_labels(cube if not isinstance(cube, list) else cube[0], labels=["cube"], taxonomy="class")
+    cube_prim = cube[0] if isinstance(cube, list) else cube
+    findings["cube_path"] = str(cube_prim.GetPath())
+    add_labels(cube_prim, labels=["cube"], taxonomy="class")
 
     add_reference_to_stage(usd_path=str(Path(USD).resolve()), prim_path="/World/Mug")
     bootstrap.advance(app, 20)
@@ -108,7 +114,17 @@ def _run(app, findings, save):
     camera = rep.functional.create.camera(
         position=(0.9, 0.9, 0.7), look_at=(0.17, 0.0, 0.05), name="DiagCam", parent="/World"
     )
-    rp = rep.create.render_product(camera, (1280, 704))
+    camera_prim = camera[0] if isinstance(camera, list) else camera
+    camera_path = str(camera_prim.GetPath())
+    findings["camera_path"] = camera_path
+    findings["camera_xform"] = str(
+        UsdGeom.Xformable(camera_prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+    )
+    # Pass the path rather than the prim — render_product's accepted types
+    # are one of the things being tested here.
+    rp = rep.create.render_product(camera_path, (1280, 704))
+    findings["render_product"] = str(rp)
+    save()
 
     rgb = rep.annotators.get("rgb")
     depth = rep.annotators.get("distance_to_camera")

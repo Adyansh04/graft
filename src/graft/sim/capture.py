@@ -75,9 +75,12 @@ def _prepare_stage(app, config) -> None:
     bootstrap.advance(app, 10)
 
     class_name = config.classes[0].name
-    semantics.label_target(TARGET_PRIM, class_name)
+    labelled = semantics.label_target(TARGET_PRIM, class_name)
     stripped = semantics.strip_foreign_labels(TARGET_PRIM)
-    print(f"labelled {TARGET_PRIM} as {class_name!r}; stripped labels from {stripped} other prim(s)")
+    print(
+        f"labelled {len(labelled)} prim(s) under {TARGET_PRIM} as {class_name!r}; "
+        f"stripped labels from {stripped} other prim(s)"
+    )
 
     import omni.replicator.core as rep
 
@@ -110,10 +113,17 @@ def _render_clip(app, config, paths: RunPaths, index: int, seed: int, frames: in
             f"{result.steps} steps; capturing anyway"
         )
 
+    scene.ensure_world()
     camera = rep.functional.create.camera(
-        position=(1.0, 0.0, 0.5), look_at=(0.0, 0.0, 0.0), name=f"Camera_{index}", parent="/World"
+        position=(1.0, 0.0, 0.5),
+        look_at=(0.0, 0.0, 0.0),
+        focal_length=config.capture.camera.focal_length,
+        clipping_range=tuple(config.capture.camera.clipping_range),
+        name=f"Camera_{index}",
+        parent="/World",
     )
-    render_product = rep.create.render_product(camera, tuple(config.sim.resolution))
+    camera_prim = camera[0] if isinstance(camera, list) else camera
+    render_product = rep.create.render_product(str(camera_prim.GetPath()), tuple(config.sim.resolution))
 
     cosmos_writer, cosmos_backend = _attach_cosmos_writer(clip_dir, config)
     label_writer = _attach_label_writer(clip_dir, config, render_product)

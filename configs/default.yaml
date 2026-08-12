@@ -39,6 +39,10 @@ capture:
     orbit_degrees: 120.0
     elevation_deg: [15.0, 45.0]
     radius_m: [0.4, 0.9]
+    focal_length: 24.0
+    # Replicator's default near plane is 1.0 m — further than the whole
+    # orbit, so the object is clipped away and every frame renders empty.
+    clipping_range: [0.01, 1000.0]
   randomizers:
     lighting:
       dome_intensity: [300.0, 1500.0]

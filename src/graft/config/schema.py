@@ -96,6 +96,23 @@ class CameraCfg(Strict):
     orbit_degrees: float = 120.0
     elevation_deg: tuple[float, float] = (15.0, 45.0)
     radius_m: tuple[float, float] = (0.4, 0.9)
+    focal_length: float = 24.0
+    # Replicator's default near plane is 1.0 m, which is further than the
+    # whole orbit — the object falls inside it and nothing renders.
+    clipping_range: tuple[float, float] = (0.01, 1000.0)
+
+    @model_validator(mode="after")
+    def _near_plane_clears_the_orbit(self):
+        near, far = self.clipping_range
+        if near <= 0 or near >= far:
+            raise ValueError(f"clipping_range must be (near, far) with 0 < near < far, got {self.clipping_range}")
+        if near >= min(self.radius_m):
+            raise ValueError(
+                f"clipping_range near plane ({near} m) is not closer than the nearest "
+                f"camera orbit radius ({min(self.radius_m)} m); the object would be "
+                "clipped away and every frame would render empty"
+            )
+        return self
 
 
 class LightingCfg(Strict):

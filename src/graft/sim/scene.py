@@ -12,13 +12,31 @@ DOME_PATH = "/World/DomeLight"
 DISTRACTOR_ROOT = "/World/Distractors"
 
 
+WORLD_PATH = "/World"
+
+
+def ensure_world() -> None:
+    """`rep.functional.create.*(parent=...)` requires the parent to exist.
+
+    Only `add_reference_to_stage` creates `/World` implicitly, and the ground
+    plane is built before any asset is referenced.
+    """
+    import omni.usd
+    from pxr import UsdGeom
+
+    stage = omni.usd.get_context().get_stage()
+    if not stage.GetPrimAtPath(WORLD_PATH):
+        UsdGeom.Xform.Define(stage, WORLD_PATH)
+
+
 def build_static_scene(ground_size_m: float = 4.0) -> None:
     """Ground plane and a physics scene. Created once per run."""
     import omni.replicator.core as rep
 
+    ensure_world()
     rep.functional.physics.create_physics_scene("/PhysicsScene", timeStepsPerSecond=60)
     ground = rep.functional.create.plane(
-        name="Ground", parent="/World", scale=(ground_size_m, ground_size_m, 1.0)
+        name="Ground", parent=WORLD_PATH, scale=(ground_size_m, ground_size_m, 1.0)
     )
     rep.functional.physics.apply_collider(ground)
 

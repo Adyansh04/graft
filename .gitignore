@@ -11,6 +11,11 @@ __pycache__/
 .venv/
 .venv-isaac/
 
+# Downloaded source assets. Reproducible with scripts/fetch_asset.py, and
+# the texture sets run to hundreds of MB. Anchored to the repo root so it
+# cannot swallow src/graft/assets/.
+/assets/
+
 # Generated / regenerable pipeline artifacts. Never commit renders,
 # datasets, or trained weights — regenerate from source config instead of
 # versioning. If a handful of curated fixture assets genuinely need to be

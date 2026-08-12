@@ -130,6 +130,25 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_asset_validate(args: argparse.Namespace) -> int:
+    from graft.assets.local import LocalUSDSource
+    from graft.assets.validate import validate_asset
+    from graft.config.loader import load_config
+
+    config = load_config(args.config)
+    source = LocalUSDSource(
+        config.asset.usd_path,
+        config.asset.target_prim_path,
+        config.classes[0].name,
+    )
+    asset = source.resolve()
+    report = validate_asset(
+        asset.usd_path, asset.target_prim_path, tuple(config.asset.expected_size_m)
+    )
+    print(report.render())
+    return 0 if report.ok else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="graft", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -152,6 +171,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     status = with_config(sub.add_parser("status", help="show stage and clip progress"))
     status.set_defaults(func=cmd_status)
+
+    asset = sub.add_parser("asset", help="asset intake")
+    asset_sub = asset.add_subparsers(dest="asset_command", required=True)
+    asset_validate = with_config(
+        asset_sub.add_parser("validate", help="check a USD asset is usable before rendering")
+    )
+    asset_validate.set_defaults(func=cmd_asset_validate)
 
     return parser
 

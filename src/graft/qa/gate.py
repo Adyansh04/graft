@@ -83,14 +83,13 @@ def _check_clip(config: Config, paths: RunPaths, clip_index: int, source: str, r
     from PIL import Image
 
     clip_dir = paths.clip(clip_index)
+    sim_dir = paths.clip_modality(clip_index, "rgb")
     if source == "sim":
-        frame_dir = clip_dir / "cosmos" / "rgb"
+        frame_dir = sim_dir
     else:
         frame_dir = paths.cosmos_frames / f"clip_{clip_index:04d}"
-    if not frame_dir.is_dir():
+    if frame_dir is None or not frame_dir.is_dir():
         return
-
-    sim_dir = clip_dir / "cosmos" / "rgb"
     frames = sorted(frame_dir.glob("*.png"))
     # Only frames that reach the dataset are worth checking.
     for frame_index in range(0, len(frames), config.dataset.stride):
@@ -108,7 +107,7 @@ def _check_clip(config: Config, paths: RunPaths, clip_index: int, source: str, r
             report.reject(clip_index, frame_index, source, area.name, area.value)
             continue
 
-        if source == "cosmos":
+        if source == "cosmos" and sim_dir is not None:
             _check_cosmos_frame(
                 config, clip_dir, sim_dir, image, clip_index, frame_index, source, report
             )

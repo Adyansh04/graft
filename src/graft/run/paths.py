@@ -76,6 +76,20 @@ class RunPaths:
     def clip_labels(self, index: int) -> Path:
         return self.clip(index) / "labels"
 
+    def clip_modality(self, index: int, modality: str) -> Path | None:
+        """Locate a modality's frames inside a clip.
+
+        CosmosWriter nests its output under a directory of its own naming, so
+        the layout below `cosmos/` is discovered rather than assumed.
+        """
+        root = self.clip(index) / "cosmos"
+        if not root.is_dir():
+            return None
+        for candidate in sorted(root.rglob(modality)):
+            if candidate.is_dir():
+                return candidate
+        return None
+
     def existing_clips(self) -> list[int]:
         """Clip indices with a directory present, in order. Says nothing about
         whether they are complete — ask `manifest.completed_clips` for that."""

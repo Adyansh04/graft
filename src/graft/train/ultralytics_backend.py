@@ -24,11 +24,13 @@ class UltralyticsTrainer:
 
         detector = YOLO(model)
         results = detector.train(
-            data=str(dataset_yaml),
+            data=str(Path(dataset_yaml).resolve()),
             epochs=epochs,
             imgsz=imgsz,
             batch=batch,
-            project=str(out_dir),
+            # Absolute: a relative project is resolved against Ultralytics'
+            # own configured runs directory, not the run directory.
+            project=str(Path(out_dir).resolve()),
             name="train",
             exist_ok=True,
             **kwargs,
@@ -39,17 +41,48 @@ class UltralyticsTrainer:
         )
 
     def evaluate(
-        self, weights: Path, dataset_yaml: Path, split: str = "val", *, target: str = "sim-val", **kwargs
+        self,
+        weights: Path,
+        dataset_yaml: Path,
+        split: str = "val",
+        *,
+        target: str = "sim-val",
+        out_dir: Path | None = None,
+        images: int | None = None,
+        **kwargs,
     ) -> EvalResult:
         from ultralytics import YOLO
 
         detector = YOLO(str(weights))
-        results = detector.val(data=str(dataset_yaml), split=split, **kwargs)
+        if out_dir is not None:
+            kwargs.setdefault("project", str(Path(out_dir).resolve()))
+            kwargs.setdefault("name", target)
+            kwargs.setdefault("exist_ok", True)
+        results = detector.val(data=str(Path(dataset_yaml).resolve()), split=split, **kwargs)
         return EvalResult(
             target=target,
             metrics=_extract_metrics(results),
-            images=int(getattr(getattr(results, "seen", 0), "real", 0) or getattr(results, "seen", 0) or 0),
+            images=images if images is not None else _seen(results),
         )
+
+
+def _seen(results) -> int:
+    """How many images were scored, or 0 if the version does not say.
+
+    Deliberately narrow: a wrong-but-plausible count is worse than none, so
+    only fields that genuinely mean "images seen" are consulted.
+    """
+    for source in (
+        getattr(results, "seen", None),
+        getattr(getattr(results, "validator", None), "seen", None),
+    ):
+        try:
+            value = int(source)
+        except (TypeError, ValueError):
+            continue
+        if value > 0:
+            return value
+    return 0
 
 
 def _extract_metrics(results) -> dict[str, float]:

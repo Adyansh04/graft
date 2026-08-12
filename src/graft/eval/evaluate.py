@@ -25,7 +25,14 @@ def evaluate(config: Config, paths: RunPaths, weights: Path) -> dict:
         dataset_yaml = paths.dataset / "dataset.yaml"
         if dataset_yaml.is_file():
             results.append(
-                trainer.evaluate(weights, dataset_yaml, split="val", target="sim-val")
+                trainer.evaluate(
+                    weights,
+                    dataset_yaml,
+                    split="val",
+                    target="sim-val",
+                    out_dir=paths.eval,
+                    images=_count_images(paths.dataset / "images" / "val"),
+                )
             )
 
     if config.eval.real_photos_dir:
@@ -35,7 +42,14 @@ def evaluate(config: Config, paths: RunPaths, weights: Path) -> dict:
         print(report.render())
         if report.ok:
             results.append(
-                trainer.evaluate(weights, report.dataset_yaml, split="val", target="real-photos")
+                trainer.evaluate(
+                    weights,
+                    report.dataset_yaml,
+                    split="val",
+                    target="real-photos",
+                    out_dir=paths.eval,
+                    images=report.labelled,
+                )
             )
         else:
             print("real-photo evaluation skipped — fix the problems above")
@@ -47,6 +61,12 @@ def evaluate(config: Config, paths: RunPaths, weights: Path) -> dict:
     paths.eval.mkdir(parents=True, exist_ok=True)
     (paths.eval / "metrics.json").write_text(json.dumps(payload, indent=2))
     return payload
+
+
+def _count_images(directory: Path) -> int:
+    if not directory.is_dir():
+        return 0
+    return sum(1 for p in directory.iterdir() if p.suffix.lower() in {".png", ".jpg", ".jpeg"})
 
 
 def render(payload: dict) -> str:

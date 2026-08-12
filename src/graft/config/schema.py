@@ -237,7 +237,10 @@ class CosmosQaCfg(Strict):
 
 
 class QaCfg(Strict):
-    blur_lap_var_min: float = 60.0
+    # A floor for degenerate frames, not a photographic sharpness gate.
+    # Clean renders of a smooth object on a plain background measure 3-20;
+    # a blank frame measures near zero.
+    blur_lap_var_min: float = 2.0
     min_bbox_area_px: Positive = 64
     cosmos: CosmosQaCfg = CosmosQaCfg()
     action: Literal["quarantine", "fail"] = "quarantine"

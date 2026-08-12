@@ -88,7 +88,9 @@ dataset:
   formats: [yolo_detect]
 
 qa:
-  blur_lap_var_min: 60.0
+  # Floor for degenerate frames, not a sharpness gate. Clean renders of a
+  # smooth object on a plain background measure 3-20; blank frames are ~0.
+  blur_lap_var_min: 2.0
   min_bbox_area_px: 64
   cosmos:
     in_mask_ssim_min: 0.7

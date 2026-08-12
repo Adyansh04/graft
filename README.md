@@ -368,7 +368,7 @@ per section per clip, so options multiply.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `blur_lap_var_min` | `60.0` | Reject frames blurrier than this |
+| `blur_lap_var_min` | `2.0` | Reject degenerate (near-blank) frames. Clean renders of a smooth object on a plain background measure 3–20, so this is a floor, not a sharpness gate — raise it only if you know your scenes are textured |
 | `min_bbox_area_px` | `64` | Reject boxes smaller than this |
 | `cosmos.in_mask_ssim_min` | `0.7` | Reject restyled frames where the object changed too much |
 | `cosmos.out_mask_change_min` | `0.05` | Reject restyled frames where the background did not change |

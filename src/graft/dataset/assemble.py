@@ -19,7 +19,6 @@ from graft.dataset.formats.base import Box, Frame
 from graft.run.manifest import clip_is_complete
 from graft.run.paths import RunPaths
 
-RGB_SUBDIR = "cosmos/rgb"
 
 
 @dataclass
@@ -114,10 +113,10 @@ def _emit_clip(
 ) -> int:
     clip_dir = paths.clip(clip_index)
     if source == "sim":
-        rgb_dir = clip_dir / RGB_SUBDIR
+        rgb_dir = paths.clip_modality(clip_index, "rgb")
     else:
         rgb_dir = paths.cosmos_frames / f"clip_{clip_index:04d}"
-    if not rgb_dir.is_dir():
+    if rgb_dir is None or not rgb_dir.is_dir():
         return 0
 
     images = sorted(rgb_dir.glob("*.png"))

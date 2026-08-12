@@ -211,6 +211,10 @@ def cmd_capture(args: argparse.Namespace) -> int:
     already = len(manifest.completed_clips(paths, frames))
     if already >= total and not args.force:
         print(f"all {total} clips already complete; use --force to re-render")
+        # The clips on disk are the truth; re-record the stage in case the
+        # manifest was reset while they survived.
+        manifest.mark(Stage.CAPTURE, Status.DONE, f"{already} clips", now=_now())
+        manifest.save(paths.manifest)
         return 0
     if args.force:
         manifest.force(Stage.CAPTURE)

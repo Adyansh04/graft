@@ -9,6 +9,21 @@ kind of thing that needs a test.
 TAXONOMY = "class"
 
 
+def annotator_info(entry: dict) -> dict:
+    """Where an annotator's metadata lives.
+
+    `annotator.get_data()` nests it under `info`, but the payload handed to
+    a writer flattens `idToLabels`/`primPaths` into the annotator dict
+    itself. Reading only the nested form yields empty labels on every frame.
+    """
+    if not isinstance(entry, dict):
+        return {}
+    nested = entry.get("info")
+    if isinstance(nested, dict) and nested:
+        return nested
+    return entry
+
+
 def normalise_id_labels(raw: dict) -> dict[str, str]:
     """Map annotator semantic ids to class names.
 

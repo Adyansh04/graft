@@ -1,7 +1,12 @@
 import numpy as np
 import pytest
 
-from graft.sim.labels import box_records, normalise_id_labels, single_render_product
+from graft.sim.labels import (
+    annotator_info,
+    box_records,
+    normalise_id_labels,
+    single_render_product,
+)
 
 CLASSES = ["mug", "bottle"]
 
@@ -183,3 +188,16 @@ def test_entry_without_our_taxonomy_is_dropped():
 def test_multi_taxonomy_entry_picks_class():
     raw = {2: MappingLike({"wikidata_class": "x", "class": "bottle"})}
     assert normalise_id_labels(raw) == {"2": "bottle"}
+
+
+def test_writer_payload_keeps_id_labels_at_the_top_level():
+    """annotator.get_data() nests metadata under `info`, but the writer
+    payload flattens it — reading only the nested form gave empty labels."""
+    entry = {"data": None, "idToLabels": {1: MappingLike({"class": "mug"})}}
+    assert annotator_info(entry) is entry
+    assert normalise_id_labels(annotator_info(entry)["idToLabels"]) == {"1": "mug"}
+
+
+def test_nested_info_form_still_works():
+    inner = {"idToLabels": {1: MappingLike({"class": "mug"})}}
+    assert annotator_info({"data": None, "info": inner}) is inner

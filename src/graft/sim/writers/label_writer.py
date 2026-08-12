@@ -14,7 +14,12 @@ from pathlib import Path
 
 import omni.replicator.core as rep
 
-from graft.sim.labels import box_records, normalise_id_labels, single_render_product
+from graft.sim.labels import (
+    annotator_info,
+    box_records,
+    normalise_id_labels,
+    single_render_product,
+)
 
 
 class GraftLabelWriter(rep.Writer):
@@ -71,7 +76,7 @@ class GraftLabelWriter(rep.Writer):
         records = box_records(
             rows,
             getattr(getattr(rows, "dtype", None), "names", None),
-            normalise_id_labels((boxes.get("info") or {}).get("idToLabels") or {}),
+            normalise_id_labels(annotator_info(boxes).get("idToLabels") or {}),
             self._class_names,
         )
         (self._out / f"bboxes_{self._frame:06d}.json").write_text(
@@ -124,12 +129,15 @@ class GraftLabelWriter(rep.Writer):
         )
 
     def _write_id_map(self, boxes: dict, instances: dict) -> None:
+        seg_info = annotator_info(instances)
         mapping = {
             "bounding_box_2d_tight": normalise_id_labels(
-                (boxes.get("info") or {}).get("idToLabels") or {}
+                annotator_info(boxes).get("idToLabels") or {}
             ),
+            # instance_segmentation's idToLabels holds bare strings; the
+            # taxonomy mapping is in idToSemantics.
             "instance_segmentation": normalise_id_labels(
-                (instances.get("info") or {}).get("idToLabels") or {}
+                seg_info.get("idToSemantics") or seg_info.get("idToLabels") or {}
             ),
             "class_names": self._class_names,
         }

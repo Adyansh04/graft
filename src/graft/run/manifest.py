@@ -43,26 +43,21 @@ class Status(StrEnum):
     FAILED = "failed"
 
 
-# Direct dependencies. Used to decide what --force cascades to. Stages still
-# check their concrete inputs exist and fail loudly; this is not a scheduler.
+# Invalidation edges, not an execution schedule — stages verify their own
+# inputs and fail loudly rather than being ordered by this.
 STAGE_DEPS: dict[Stage, tuple[Stage, ...]] = {
     Stage.ASSET: (),
     Stage.CAPTURE: (Stage.ASSET,),
     Stage.ENCODE: (Stage.CAPTURE,),
     Stage.COSMOS_EXPORT: (Stage.ENCODE,),
     Stage.COSMOS_IMPORT: (Stage.COSMOS_EXPORT,),
-    # QA gates both sim frames and restyled ones, so it depends on both
-    # branches. The cosmos edge holds even when dataset.sources is ["sim"]:
-    # over-invalidating a cheap stage is the right failure mode, and the
-    # alternative is stale QA results surviving a Cosmos config change.
     Stage.QA: (Stage.CAPTURE, Stage.COSMOS_IMPORT),
     Stage.ASSEMBLE: (Stage.QA,),
     Stage.TRAIN: (Stage.ASSEMBLE,),
     Stage.EVAL: (Stage.TRAIN,),
 }
 
-# Which stages a config section invalidates when it changes. This is what
-# makes "re-run Cosmos with different weights without re-rendering" work.
+# Which stages a config section invalidates when it changes.
 SECTION_STAGES: dict[str, tuple[Stage, ...]] = {
     "run": tuple(Stage),
     "asset": (Stage.ASSET, Stage.CAPTURE),

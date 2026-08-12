@@ -27,16 +27,26 @@ def normalise_id_labels(raw: dict) -> dict[str, str]:
     return out
 
 
-def single_render_product(data: dict) -> dict:
-    """Unwrap Replicator's render-product keyed structure.
+ANNOTATOR_KEYS = ("bounding_box_2d_tight", "instance_segmentation", "rgb")
 
-    Capture attaches one render product. If the payload arrives nested under
-    a product name, take the only entry rather than guessing the name.
+
+def single_render_product(data: dict, max_depth: int = 4) -> dict:
+    """Unwrap Replicator's nested payload down to the annotator level.
+
+    `data_structure="renderProduct"` nests two levels —
+    `{"renderProducts": {<render_product>: {<annotator>: ...}}}` — so
+    stripping a single level leaves the annotator keys still out of reach and
+    every frame reads as empty. Descend until the annotator keys appear.
     """
-    if "bounding_box_2d_tight" in data or "instance_segmentation" in data:
-        return data
-    nested = [v for v in data.values() if isinstance(v, dict)]
-    return nested[0] if len(nested) == 1 else data
+    current = data
+    for _ in range(max_depth):
+        if any(key in current for key in ANNOTATOR_KEYS):
+            return current
+        nested = [v for v in current.values() if isinstance(v, dict)]
+        if len(nested) != 1:
+            break
+        current = nested[0]
+    return current
 
 
 def box_records(rows, dtype_names, id_to_class: dict[str, str], class_names: list[str]) -> list[dict]:

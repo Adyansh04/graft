@@ -126,3 +126,21 @@ def test_missing_semantic_field_degrades_without_crashing():
     records = box_records(data, dtype.names, {"0": "mug"}, CLASSES)
     assert records[0]["semantic_id"] is None
     assert records[0]["class_id"] is None
+
+
+def test_render_product_structure_is_unwrapped_two_levels():
+    """data_structure="renderProduct" nests {"renderProducts": {rp: {anno}}};
+    stripping only one level made every frame read as empty."""
+    inner = {"bounding_box_2d_tight": {"data": None}}
+    payload = {"renderProducts": {"RenderProduct_Replicator": inner}}
+    assert single_render_product(payload) is inner
+
+
+def test_unwrapping_stops_at_the_annotator_level():
+    inner = {"rgb": {"data": None}}
+    assert single_render_product({"a": {"b": inner}}) is inner
+
+
+def test_unwrapping_gives_up_rather_than_descending_forever():
+    payload = {"a": {"b": {"c": {"d": {"e": {}}}}}}
+    single_render_product(payload)

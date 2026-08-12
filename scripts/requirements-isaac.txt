@@ -1,0 +1,16 @@
+# Isaac Sim environment pins. Installed by scripts/setup_isaac_sim_env.sh
+# with --extra-index-url https://pypi.nvidia.com.
+#
+# Keep this list minimal: only isaacsim plus what graft.config needs to
+# import inside the sim subprocess. Adding anything heavy here risks a
+# resolver fight with isaacsim's own pins (notably torch).
+#
+# NEVER add usd-core: it ships its own compiled pxr that collides with
+# Isaac's bundled one at the Boost.Python level. graft doctor checks this.
+
+isaacsim[all,extscache]==6.0.1.0
+
+# Needed so graft.config.{schema,loader} import inside the sim subprocess.
+pydantic==2.11.9
+pyyaml==6.0.2
+numpy==2.2.6

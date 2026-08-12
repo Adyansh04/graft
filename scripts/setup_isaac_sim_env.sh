@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Sets up a dedicated venv for Isaac Sim / Replicator code. Separate from
+# the core env (scripts/setup_core_env.sh) for DEPENDENCY isolation, not
+# Python version — both are 3.12 since Isaac Sim 6.0. Specifically:
+#   - usd-core (core env) ships its own compiled pxr that collides with
+#     Isaac's bundled one at the Boost.Python level. Never install it here.
+#   - ultralytics' torch collides with isaacsim's.
+# graft itself is never installed here; sim stages run via PYTHONPATH=src.
+#
+# Isaac Sim's Python pin moves per release (3.10 for 4.x, 3.11 for 5.x,
+# 3.12 for 6.0.1 as of 2026-08-12). Re-verify at
+# https://docs.isaacsim.omniverse.nvidia.com before bumping the version.
+# Needs ~25GB of disk for isaacsim + extscache.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+ISAAC_SIM_PYTHON_VERSION="3.12"
+ISAAC_SIM_INDEX="https://pypi.nvidia.com"
+
+uv venv .venv-isaac --python "${ISAAC_SIM_PYTHON_VERSION}"
+uv pip install --python .venv-isaac --extra-index-url "${ISAAC_SIM_INDEX}" \
+    -r scripts/requirements-isaac.txt
+echo "Isaac Sim env ready: .venv-isaac/ (Python ${ISAAC_SIM_PYTHON_VERSION})"
+echo "Verify with: uv run graft doctor"

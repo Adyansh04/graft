@@ -72,15 +72,27 @@ def label_target(prim_path: str, class_name: str) -> list[str]:
 
     make_editable(prim_path)
 
+    # The asset ships its own taxonomies (the mug carries wikidata_class),
+    # and any prim holding one becomes a separate detection with the same
+    # extents. Clear the subtree before applying ours.
+    from isaacsim.core.experimental.utils.semantics import remove_all_labels
+
+    for existing in Usd.PrimRange(prim):
+        try:
+            if get_labels(existing):
+                remove_all_labels(existing, remove_taxonomies=True)
+        except Exception:  # noqa: BLE001 - not every prim supports labels
+            continue
+
+    # Meshes only. Labelling an ancestor as well produces a duplicate
+    # detection per mesh, with identical extents.
     labelled = []
-    add_labels(prim, labels=[class_name], taxonomy=TAXONOMY)
-    labelled.append(str(prim.GetPath()))
     for mesh in Usd.PrimRange(prim):
         if mesh.GetTypeName() == "Mesh":
             add_labels(mesh, labels=[class_name], taxonomy=TAXONOMY)
             labelled.append(str(mesh.GetPath()))
 
-    if len(labelled) == 1:
+    if not labelled:
         raise RuntimeError(
             f"{prim_path} contains no Mesh prims to label — annotations would be empty"
         )

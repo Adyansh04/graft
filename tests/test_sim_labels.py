@@ -128,19 +128,58 @@ def test_missing_semantic_field_degrades_without_crashing():
     assert records[0]["class_id"] is None
 
 
-def test_render_product_structure_is_unwrapped_two_levels():
-    """data_structure="renderProduct" nests {"renderProducts": {rp: {anno}}};
-    stripping only one level made every frame read as empty."""
-    inner = {"bounding_box_2d_tight": {"data": None}}
-    payload = {"renderProducts": {"RenderProduct_Replicator": inner}}
-    assert single_render_product(payload) is inner
+def test_real_6_0_payload_reaches_the_annotators():
+    """Measured payload shape from a real capture. The wrapper carries five
+    sibling dicts alongside renderProducts, so a lone-nested-dict heuristic
+    bails out and every frame reads as empty."""
+    annotators = {
+        "camera": "/World/Camera_0",
+        "bounding_box_2d_tight": {"data": None, "idToLabels": {}},
+        "instance_segmentation": {"data": None, "idToLabels": {}},
+    }
+    payload = {
+        "swhFrameNumber": 12,
+        "reference_time": (0, 1),
+        "distribution_outputs": {},
+        "trigger_outputs": {},
+        "named_outputs": {},
+        "renderProducts": {"Replicator": annotators},
+    }
+    assert single_render_product(payload) is annotators
 
 
-def test_unwrapping_stops_at_the_annotator_level():
+def test_flat_payload_still_passes_through():
+    flat = {"bounding_box_2d_tight": {"data": None}}
+    assert single_render_product(flat) is flat
+
+
+def test_single_wrapper_shape_still_unwraps():
     inner = {"rgb": {"data": None}}
-    assert single_render_product({"a": {"b": inner}}) is inner
+    assert single_render_product({"RenderProduct": inner}) is inner
 
 
-def test_unwrapping_gives_up_rather_than_descending_forever():
-    payload = {"a": {"b": {"c": {"d": {"e": {}}}}}}
-    single_render_product(payload)
+class MappingLike:
+    """Isaac Sim 6.0 returns mapping-like values, not real dicts."""
+
+    def __init__(self, data):
+        self._data = data
+
+    def get(self, key, default=None):
+        return self._data.get(key, default)
+
+
+def test_mapping_like_values_are_read():
+    """isinstance(value, dict) is False for these, and using it silently
+    discarded every label."""
+    raw = {1: MappingLike({"class": "mug", "wikidata_class": "wikidata_qcode"})}
+    assert normalise_id_labels(raw) == {"1": "mug"}
+
+
+def test_entry_without_our_taxonomy_is_dropped():
+    raw = {0: MappingLike({"wikidata_class": "wikidata_qcode"})}
+    assert normalise_id_labels(raw) == {}
+
+
+def test_multi_taxonomy_entry_picks_class():
+    raw = {2: MappingLike({"wikidata_class": "x", "class": "bottle"})}
+    assert normalise_id_labels(raw) == {"2": "bottle"}

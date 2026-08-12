@@ -98,10 +98,15 @@ def _prepare_stage(app, config) -> None:
         f"labelled {len(labelled)} prim(s) under {TARGET_PRIM} as {class_name!r}; "
         f"stripped labels from {stripped} other prim(s)"
     )
+    # Clearing instanceable flags and authoring labels are stage edits; the
+    # render graph picks them up on an app update, not immediately.
+    bootstrap.advance(app, 10)
 
     import omni.replicator.core as rep
 
     rep.functional.physics.apply_rigid_body(_prim(TARGET_PRIM), with_collider=True)
+    bootstrap.advance(app, 5)
+    print(f"semantics visible to the stage: {semantics.read_labels(TARGET_PRIM)}")
 
 
 def _render_clip(app, config, paths: RunPaths, index: int, seed: int, frames: int) -> None:

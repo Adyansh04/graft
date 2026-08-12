@@ -39,13 +39,13 @@ class GraftLabelWriter(rep.Writer):
         self._frame = 0
         self._id_map_written = False
 
+        # No semanticTypes filter: it selects on the pre-6.0 `Semantics`
+        # schema, while labels are now authored as UsdSemantics taxonomies,
+        # so filtering on it matches nothing and every frame comes back
+        # unlabelled.
         self.annotators = [
-            rep.annotators.get(
-                "bounding_box_2d_tight", init_params={"semanticTypes": ["class"]}
-            ),
-            rep.annotators.get(
-                "instance_segmentation", init_params={"semanticTypes": ["class"]}
-            ),
+            rep.annotators.get("bounding_box_2d_tight"),
+            rep.annotators.get("instance_segmentation"),
         ]
 
     @property
@@ -63,6 +63,7 @@ class GraftLabelWriter(rep.Writer):
         instances = payload.get("instance_segmentation") or {}
 
         if not self._id_map_written:
+            self._dump_payload_shape(data, payload)
             self._write_id_map(boxes, instances)
             self._id_map_written = True
 
@@ -78,6 +79,49 @@ class GraftLabelWriter(rep.Writer):
         )
         self._write_instance_mask(instances)
         self._frame += 1
+
+    def _dump_payload_shape(self, raw: dict, payload: dict) -> None:
+        """Record what Replicator actually handed over.
+
+        The payload nesting is undocumented for 6.0 and reading it wrongly
+        produces empty labels that look identical to a labelling failure.
+        """
+
+        def shape(value, depth: int = 0):
+            if depth > 3:
+                return type(value).__name__
+            if isinstance(value, dict):
+                return {str(k): shape(v, depth + 1) for k, v in value.items()}
+            if hasattr(value, "shape"):
+                return f"{type(value).__name__}{tuple(value.shape)}"
+            if isinstance(value, (list, tuple)):
+                return f"{type(value).__name__}[{len(value)}]"
+            return type(value).__name__
+
+        def raw_id_labels(name: str):
+            entry = payload.get(name) or {}
+            return {
+                "idToLabels": {str(k): repr(v) for k, v in (entry.get("idToLabels") or {}).items()},
+                "idToSemantics": {
+                    str(k): repr(v) for k, v in (entry.get("idToSemantics") or {}).items()
+                },
+                "primPaths": [str(p) for p in (entry.get("primPaths") or [])][:6],
+            }
+
+        (self._out / "payload_shape.json").write_text(
+            json.dumps(
+                {
+                    "raw": shape(raw),
+                    "unwrapped_keys": sorted(str(k) for k in payload),
+                    "attached_annotators": [
+                        getattr(a, "name", type(a).__name__) for a in (self.annotators or [])
+                    ],
+                    "bounding_box_2d_tight": raw_id_labels("bounding_box_2d_tight"),
+                    "instance_segmentation": raw_id_labels("instance_segmentation"),
+                },
+                indent=2,
+            )
+        )
 
     def _write_id_map(self, boxes: dict, instances: dict) -> None:
         mapping = {

@@ -6,22 +6,28 @@ kind of thing that needs a test.
 """
 
 
+TAXONOMY = "class"
+
+
 def normalise_id_labels(raw: dict) -> dict[str, str]:
     """Map annotator semantic ids to class names.
 
-    Isaac Sim 6.0 returns `{"class": "mug"}` per id; earlier versions
-    returned `"class:mug"`. NVIDIA's own 6.0 examples still guard for both,
-    so both are accepted. Entries in neither shape are dropped rather than
-    guessed at.
+    Isaac Sim 6.0 returns one entry per id holding every taxonomy the prim
+    carries, e.g. `{"class": "mug", "wikidata_class": ...}`; earlier
+    versions returned `"class:mug"`. Both are accepted.
+
+    The 6.0 values are mapping-*like* rather than real `dict`s, so this
+    duck-types on `.get` — an `isinstance(value, dict)` check silently
+    discards every entry and produces unlabelled frames.
     """
     out: dict[str, str] = {}
     for key, value in (raw or {}).items():
-        if isinstance(value, dict):
-            label = value.get("class")
+        label = None
+        getter = getattr(value, "get", None)
+        if callable(getter):
+            label = getter(TAXONOMY)
         elif isinstance(value, str):
             label = value.split(":", 1)[-1] if ":" in value else value
-        else:
-            label = None
         if label:
             out[str(key)] = str(label)
     return out
@@ -29,24 +35,32 @@ def normalise_id_labels(raw: dict) -> dict[str, str]:
 
 ANNOTATOR_KEYS = ("bounding_box_2d_tight", "instance_segmentation", "rgb")
 
+# Measured payload for data_structure="renderProduct" on 6.0.1:
+#   {swhFrameNumber, reference_time, distribution_outputs, trigger_outputs,
+#    named_outputs, renderProducts: {<name>: {camera, resolution, <annotator>...}}}
+RENDER_PRODUCTS_KEY = "renderProducts"
 
-def single_render_product(data: dict, max_depth: int = 4) -> dict:
-    """Unwrap Replicator's nested payload down to the annotator level.
 
-    `data_structure="renderProduct"` nests two levels —
-    `{"renderProducts": {<render_product>: {<annotator>: ...}}}` — so
-    stripping a single level leaves the annotator keys still out of reach and
-    every frame reads as empty. Descend until the annotator keys appear.
+def single_render_product(data: dict) -> dict:
+    """Reach the annotator data inside Replicator's payload.
+
+    Capture attaches one render product, so the single entry under
+    `renderProducts` is the one wanted. The wrapper carries several sibling
+    dicts alongside it, so this navigates by key rather than by looking for
+    a lone nested dict.
     """
-    current = data
-    for _ in range(max_depth):
-        if any(key in current for key in ANNOTATOR_KEYS):
-            return current
-        nested = [v for v in current.values() if isinstance(v, dict)]
-        if len(nested) != 1:
-            break
-        current = nested[0]
-    return current
+    if any(key in data for key in ANNOTATOR_KEYS):
+        return data
+
+    products = data.get(RENDER_PRODUCTS_KEY)
+    if isinstance(products, dict) and products:
+        entries = [v for v in products.values() if isinstance(v, dict)]
+        if entries:
+            return entries[0]
+
+    # Older/flatter shapes: a single wrapping dict.
+    nested = [v for v in data.values() if isinstance(v, dict)]
+    return nested[0] if len(nested) == 1 else data
 
 
 def box_records(rows, dtype_names, id_to_class: dict[str, str], class_names: list[str]) -> list[dict]:

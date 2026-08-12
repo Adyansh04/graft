@@ -22,6 +22,9 @@ from pathlib import Path
 MIN_FREE_GB_FOR_ISAAC = 35
 
 
+EULA_ENV = {"OMNI_KIT_ACCEPT_EULA": "YES"}
+
+
 def repo_root() -> Path:
     """Walk up to the directory holding pyproject.toml."""
     for candidate in [Path.cwd(), *Path(__file__).resolve().parents]:
@@ -41,7 +44,11 @@ class Check:
     detail: str
 
     def render(self) -> str:
-        return f"  [{'ok' if self.ok else 'FAIL'}] {self.name}: {self.detail}"
+        from graft import console
+
+        tag = console.status(self.ok)
+        detail = self.detail if self.ok else console.warn(self.detail)
+        return f"  [{tag}] {console.bold(self.name)}: {detail}"
 
 
 def free_gb(path: Path) -> float:
@@ -50,8 +57,11 @@ def free_gb(path: Path) -> float:
 
 
 def _run(args: list[str], timeout: int = 60) -> tuple[int, str]:
+    import os
+
+    env = {**os.environ, **EULA_ENV}
     try:
-        proc = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+        proc = subprocess.run(args, capture_output=True, text=True, timeout=timeout, env=env)
         return proc.returncode, (proc.stdout + proc.stderr).strip()
     except (OSError, subprocess.SubprocessError) as exc:
         return 1, str(exc)
@@ -104,24 +114,44 @@ def check_isaac_venv(root: Path | None = None) -> list[Check]:
             )
         ]
 
-    checks = [Check("isaac venv", True, str(python))]
-
-    # usd-core in the Isaac venv is the Boost.Python collision. Assert rather
-    # than trust the setup script.
-    code, _ = _run([str(python), "-c", "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('pxr') else 1)"])
-    if code == 0:
-        code2, origin = _run([str(python), "-c", "import pxr; print(pxr.__file__)"])
-        contaminated = "site-packages" in origin and "isaacsim" not in origin.lower()
-        checks.append(
+    probe = (
+        "import isaacsim, importlib.metadata as m; "
+        "print(m.version('isaacsim'))"
+    )
+    code, out = _run([str(python), "-c", probe], timeout=300)
+    if code != 0:
+        return [
             Check(
-                "isaac pxr",
-                not contaminated,
-                origin if not contaminated else f"{origin} — looks like usd-core, not Isaac's bundle",
+                "isaac venv",
+                False,
+                "venv exists but isaacsim does not import — the install did not "
+                "complete. Re-run scripts/setup_isaac_sim_env.sh and read its "
+                "output rather than its exit code.",
             )
-        )
-    else:
-        checks.append(Check("isaac pxr", False, "pxr not importable in the Isaac venv"))
+        ]
+    checks = [Check("isaac venv", True, f"isaacsim {out.splitlines()[-1]}")]
 
+    # Isaac ships its own pxr into site-packages, so the path says nothing.
+    # Ask whether the usd-core distribution is installed instead.
+    probe = (
+        "import importlib.metadata as m\n"
+        "try:\n"
+        "    print('usd-core', m.version('usd-core'))\n"
+        "except m.PackageNotFoundError:\n"
+        "    print('absent')\n"
+    )
+    code, out = _run([str(python), "-c", probe])
+    contaminated = code == 0 and out.strip().startswith("usd-core")
+    checks.append(
+        Check(
+            "isaac usd-core",
+            not contaminated,
+            f"{out.strip()} — collides with Isaac's bundled pxr at the Boost.Python "
+            "level; uninstall it from .venv-isaac"
+            if contaminated
+            else "absent (correct)",
+        )
+    )
     return checks
 
 
@@ -138,7 +168,7 @@ def run_in_isaac(module: str, args: list[str], root: Path | None = None) -> int:
         raise RuntimeError(
             f"Isaac Sim venv not found at {python}. Run scripts/setup_isaac_sim_env.sh first."
         )
-    env = dict(os.environ)
+    env = {**os.environ, **EULA_ENV}
     src = str(root / "src")
     env["PYTHONPATH"] = f"{src}:{env['PYTHONPATH']}" if env.get("PYTHONPATH") else src
     return subprocess.call([str(python), "-m", module, *args], env=env)

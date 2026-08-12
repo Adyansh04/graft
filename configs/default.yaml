@@ -39,6 +39,10 @@ capture:
     orbit_degrees: 120.0
     elevation_deg: [15.0, 45.0]
     radius_m: [0.4, 0.9]
+    focal_length: 24.0
+    # Replicator's default near plane is 1.0 m — further than the whole
+    # orbit, so the object is clipped away and every frame renders empty.
+    clipping_range: [0.01, 1000.0]
   randomizers:
     lighting:
       dome_intensity: [300.0, 1500.0]
@@ -84,7 +88,9 @@ dataset:
   formats: [yolo_detect]
 
 qa:
-  blur_lap_var_min: 60.0
+  # Floor for degenerate frames, not a sharpness gate. Clean renders of a
+  # smooth object on a plain background measure 3-20; blank frames are ~0.
+  blur_lap_var_min: 2.0
   min_bbox_area_px: 64
   cosmos:
     in_mask_ssim_min: 0.7

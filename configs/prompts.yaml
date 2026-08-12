@@ -1,0 +1,38 @@
+# Prompt sections for the Cosmos restyle stage.
+#
+# One sentence is picked per section and joined; the invariant clause in
+# configs/default.yaml is appended last. Add entries here to widen scene
+# variety — combinations multiply, so a few entries per section go a long way.
+#
+# Keep the clauses mutually coherent: a kitchen counter with a spaceship
+# background degrades how well Cosmos retains the input geometry.
+
+surface:
+  - The mug rests on a scratched oak kitchen counter.
+  - The mug rests on a white laminate desk with faint coffee rings.
+  - The mug sits on a dark slate worktop with a matte finish.
+  - The mug stands on a pale birch tabletop with visible grain.
+  - The mug sits on a stainless steel counter with fine brushed lines.
+  - The mug rests on a worn pine table with small dents and knots.
+
+setting:
+  - The scene is a domestic kitchen with cupboards blurred in the background.
+  - The scene is a small home office with a bookshelf out of focus behind.
+  - The scene is a cafe interior with warm wood panelling behind.
+  - The scene is a bright studio with a plain grey backdrop.
+  - The scene is a workshop bench with tools blurred in the distance.
+  - The scene is a dining room with a window and curtains behind.
+
+lighting:
+  - Warm afternoon sunlight rakes across from the left, casting a soft shadow.
+  - Cool overcast daylight fills the scene evenly with gentle shadows.
+  - A single overhead lamp lights the scene from above with a tight shadow.
+  - Late evening light glows warm and low from one side.
+  - Diffuse light from a nearby window softly wraps the object.
+  - Bright even studio lighting leaves almost no visible shadow.
+
+atmosphere:
+  - The photograph is sharp and clean with realistic colour.
+  - The photograph has the slight grain of a handheld camera shot.
+  - The image is crisp with shallow depth of field behind the subject.
+  - The image looks like a natural everyday photograph, unposed.

@@ -316,6 +316,36 @@ def cmd_eval(args: argparse.Namespace) -> int:
     return _run_stage(args, Stage.EVAL, work)
 
 
+def cmd_cosmos_export(args: argparse.Namespace) -> int:
+    from graft.run.manifest import Stage
+
+    def work(config, paths):
+        from graft.cosmos.bundle import export_bundle
+
+        result = export_bundle(config, paths)
+        print(result.render())
+        return f"{len(result.clips)} clips"
+
+    return _run_stage(args, Stage.COSMOS_EXPORT, work)
+
+
+def cmd_cosmos_import(args: argparse.Namespace) -> int:
+    from graft.run.manifest import Stage
+
+    def work(config, paths):
+        from graft.cosmos.importer import import_outputs
+
+        result = import_outputs(
+            config, paths, Path(args.output) if args.output else None
+        )
+        print(result.render())
+        if result.rejected and not result.imported:
+            raise RuntimeError("no clips imported; see the rejections above")
+        return f"{len(result.imported)} imported, {len(result.rejected)} rejected"
+
+    return _run_stage(args, Stage.COSMOS_IMPORT, work)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="graft", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -366,6 +396,22 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--force", action="store_true", help="redo a completed stage")
     evaluate.add_argument("--weights", help="override the weights path")
     evaluate.set_defaults(func=cmd_eval)
+
+    cosmos = sub.add_parser("cosmos", help="Cosmos Transfer augmentation")
+    cosmos_sub = cosmos.add_subparsers(dest="cosmos_command", required=True)
+
+    cosmos_export = with_config(
+        cosmos_sub.add_parser("export", help="build a self-contained job bundle for a GPU machine")
+    )
+    cosmos_export.add_argument("--force", action="store_true")
+    cosmos_export.set_defaults(func=cmd_cosmos_export)
+
+    cosmos_import = with_config(
+        cosmos_sub.add_parser("import", help="validate and decode returned Cosmos output")
+    )
+    cosmos_import.add_argument("--output", help="directory holding video_N/output.mp4")
+    cosmos_import.add_argument("--force", action="store_true")
+    cosmos_import.set_defaults(func=cmd_cosmos_import)
 
     asset = sub.add_parser("asset", help="asset intake")
     asset_sub = asset.add_subparsers(dest="asset_command", required=True)

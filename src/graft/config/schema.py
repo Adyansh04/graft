@@ -102,8 +102,7 @@ class LightingCfg(Strict):
     dome_intensity: tuple[float, float] = (300.0, 1500.0)
     n_area_lights: tuple[int, int] = (1, 3)
     area_intensity: tuple[float, float] = (1e4, 8e4)
-    # Fraction of area lights switched off per clip. Uneven, sometimes-dark
-    # scenes teach more than uniformly lit ones.
+    # Fraction of area lights switched off per clip.
     off_probability: Fraction = 0.3
 
 

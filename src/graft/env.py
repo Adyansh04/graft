@@ -104,7 +104,18 @@ def check_isaac_venv(root: Path | None = None) -> list[Check]:
             )
         ]
 
-    checks = [Check("isaac venv", True, str(python))]
+    code, out = _run([str(python), "-c", "import isaacsim; print(isaacsim.__version__)"], timeout=180)
+    if code != 0:
+        return [
+            Check(
+                "isaac venv",
+                False,
+                "venv exists but isaacsim does not import — the install did not "
+                "complete. Re-run scripts/setup_isaac_sim_env.sh and read its "
+                "output rather than its exit code.",
+            )
+        ]
+    checks = [Check("isaac venv", True, f"isaacsim {out.splitlines()[-1]}")]
 
     # usd-core in the Isaac venv is the Boost.Python collision. Assert rather
     # than trust the setup script.

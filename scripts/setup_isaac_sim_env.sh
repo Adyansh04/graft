@@ -18,7 +18,17 @@ ISAAC_SIM_PYTHON_VERSION="3.12"
 ISAAC_SIM_INDEX="https://pypi.nvidia.com"
 
 uv venv .venv-isaac --python "${ISAAC_SIM_PYTHON_VERSION}"
-uv pip install --python .venv-isaac --extra-index-url "${ISAAC_SIM_INDEX}" \
+
+# isaacsim's dependencies straddle pypi.nvidia.com and PyPI — some packages
+# exist on NVIDIA's index but only at versions isaacsim does not want. uv's
+# default is to resolve a package from the first index that has it, which
+# makes those unsatisfiable, so it has to consider both.
+# --prerelease=allow: some isaacsim dependencies are pinned to release
+# candidates (tinyobjloader==2.0.0rc13).
+uv pip install --python .venv-isaac \
+    --extra-index-url "${ISAAC_SIM_INDEX}" \
+    --index-strategy unsafe-best-match \
+    --prerelease=allow \
     -r scripts/requirements-isaac.txt
 echo "Isaac Sim env ready: .venv-isaac/ (Python ${ISAAC_SIM_PYTHON_VERSION})"
 echo "Verify with: uv run graft doctor"
